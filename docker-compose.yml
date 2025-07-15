@@ -1,0 +1,10 @@
+version: '3.8'
+services:
+  gradio-app:
+    build: .
+    platform: linux/amd64
+    ports:
+      - "7860:7860"
+    volumes:
+      - ../opi5test/core/config.yaml:/app/../opi5test/core/config.yaml
+    restart: unless-stopped 
