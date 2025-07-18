@@ -1,0 +1,34 @@
+cigarette:
+  duration: 1.533423
+  threshold: 1.0
+closed_eyes:
+  duration: 0.5
+  threshold: 2.0
+head_pose:
+  duration: 0.5
+  pitch: 0.5
+  yaw: 1.5
+no_belt:
+  duration: 20.0
+  threshold: 2.0
+no_driver:
+  duration: 0.5
+  threshold: 0.5
+no_face:
+  duration: 1.0
+  threshold: 0.5
+phone:
+  duration: 0.25
+  threshold: 1.0
+system:
+  alarm_enabled: true
+  alarm_event_delay: 2.0
+  alarm_server_ip: post.onnx
+  alarm_server_port: 10000
+  model: 'True'
+  post_model: '2.0'
+  rtsp_stream_url: rtsp://rtsp-server:8554/stream
+  shape_predictor: '10000'
+yawn:
+  duration: 2.0
+  threshold: 0.4
