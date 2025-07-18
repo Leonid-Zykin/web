@@ -6,5 +6,5 @@ services:
     ports:
       - "7860:7860"
     volumes:
-      - ../opi5test/core/config.yaml:/app/../opi5test/core/config.yaml
+      - ./config.yaml:/app/config.yaml
     restart: unless-stopped 
