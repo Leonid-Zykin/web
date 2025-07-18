@@ -43,12 +43,26 @@ def udp_alarm_listener(port=ALARM_UDP_PORT):
 threading.Thread(target=udp_alarm_listener, daemon=True).start()
 
 def load_config():
-    with open(CONFIG_PATH, 'r', encoding='utf-8') as f:
-        return yaml.safe_load(f)
+    try:
+        with open("/tmp/build_interface.txt", "a", encoding="utf-8") as dbg:
+            dbg.write("load_config: start\n")
+        with open(CONFIG_PATH, 'r', encoding='utf-8') as f:
+            data = yaml.safe_load(f)
+        with open("/tmp/build_interface.txt", "a", encoding="utf-8") as dbg:
+            dbg.write(f"load_config: success {data}\n")
+        return data
+    except Exception as e:
+        with open("/tmp/build_interface.txt", "a", encoding="utf-8") as dbg:
+            dbg.write(f"load_config: error {e}\n")
+        print(f"[ERROR] Failed to load config.yaml: {e}")
+        return {}
 
 def save_config(config):
-    with open(CONFIG_PATH, 'w', encoding='utf-8') as f:
-        yaml.dump(config, f, allow_unicode=True)
+    try:
+        with open(CONFIG_PATH, 'w', encoding='utf-8') as f:
+            yaml.dump(config, f, allow_unicode=True)
+    except Exception as e:
+        print(f"[ERROR] Failed to save config.yaml: {e}")
 
 # Для отображения RTSP используем gr.HTML с тегом <video> (gr.Video не поддерживает rtsp напрямую)
 def rtsp_video_html(url):
@@ -64,6 +78,8 @@ def flatten_config(config, prefix="", out=None):
         if isinstance(v, dict):
             flatten_config(v, prefix + k + ".", out)
         else:
+            with open("/tmp/flatten_debug.txt", "a", encoding="utf-8") as dbg:
+                dbg.write(f"{prefix + k} = {v} ({type(v)})\n")
             out.append((prefix + k, v))
     return out
 
@@ -95,8 +111,12 @@ def get_alarm_text():
     return '\n'.join(lines)
 
 def build_interface():
+    with open("/tmp/build_interface.txt", "a", encoding="utf-8") as dbg:
+        dbg.write("build_interface: called\n")
     config = load_config()
+    print("CONFIG FROM YAML:", config)
     flat_fields = flatten_config(config)
+    print("FLATTENED CONFIG:", flat_fields)
     default_url1, default_url2 = get_default_urls(config)
 
     with gr.Blocks(title="Видеомониторинг и настройки") as demo:
@@ -141,20 +161,12 @@ def build_interface():
         def update_videos(u1, u2):
             return rtsp_video_html(u1), rtsp_video_html(u2)
 
-        def show_status(msg, status):
-            status.update(visible=True, value=msg)
-            def hide():
-                time.sleep(3)
-                status.update(visible=False)
-            threading.Thread(target=hide, daemon=True).start()
-
         def save_all(url1, url2, *params):
             param_dict = {k: try_cast(params[i], flat_fields[i][1]) for i, (k, _) in enumerate(flat_fields)}
             config_new = unflatten_config(param_dict)
             if 'system.rtsp_stream_url' in param_dict:
                 config_new['system']['rtsp_stream_url'] = url1
             save_config(config_new)
-            show_status("✅ Изменения сохранены!", status)
             return gr.update(visible=True, value="✅ Изменения сохранены!")
 
         def reset_all():
@@ -162,7 +174,6 @@ def build_interface():
             flat_fields_new = flatten_config(config)
             values = [str(v) for _, v in flat_fields_new]
             url1, url2 = get_default_urls(config)
-            show_status("🔄 Сброшено!", status)
             return [url1, url2] + values + [gr.update(visible=True, value="🔄 Сброшено!")]
 
         def try_cast(val, orig):
@@ -181,16 +192,19 @@ def build_interface():
         def process_uploaded_video(video_file):
             if video_file is None:
                 return None, None, gr.update(visible=True, value="❌ Не выбрано видео!")
-            out_path, log_path = process_video_rest(video_file)
-            return out_path, log_path, gr.update(visible=True, value="✅ Готово!")
+            # out_path, log_path = process_video_rest(video_file)
+            # return out_path, log_path, gr.update(visible=True, value="✅ Готово!")
+            return None, None, gr.update(visible=True, value="(заглушка) Видео обработка отключена!")
 
         def sync_to_ml_click():
-            msg = sync_config_to_ml()
-            return gr.update(visible=True, value=msg)
+            # msg = sync_config_to_ml()
+            # return gr.update(visible=True, value=msg)
+            return gr.update(visible=True, value="(заглушка) sync_to_ml отключено!")
 
         def sync_from_ml_click():
-            msg = sync_config_from_ml()
-            return gr.update(visible=True, value=msg)
+            # msg = sync_config_from_ml()
+            # return gr.update(visible=True, value=msg)
+            return gr.update(visible=True, value="(заглушка) sync_from_ml отключено!")
 
         url1.change(update_videos, [url1, url2], [video1, video2])
         url2.change(update_videos, [url1, url2], [video1, video2])
