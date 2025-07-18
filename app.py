@@ -4,8 +4,43 @@ import os
 import copy
 import threading
 import time
+import cv2
+import numpy as np
+import json
+from datetime import datetime
+import requests
+import socket
+from collections import deque
 
 CONFIG_PATH = os.path.join(os.path.dirname(__file__), '../opi5test/core/config.yaml')
+RESULTS_DIR = os.path.join(os.path.dirname(__file__), 'results')
+os.makedirs(RESULTS_DIR, exist_ok=True)
+
+ML_API_URL = os.environ.get("ML_API_URL", "http://ml-api:8000/infer")
+ML_CONFIG_URL = os.environ.get("ML_CONFIG_URL", "http://ml-api:8000/config")
+ALARM_UDP_PORT = int(os.environ.get("ALARM_UDP_PORT", 8008))
+ALARM_MAX = 200
+
+# Глобальная очередь тревог
+alarm_queue = deque(maxlen=ALARM_MAX)
+
+def udp_alarm_listener(port=ALARM_UDP_PORT):
+    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    sock.bind(("0.0.0.0", port))
+    while True:
+        try:
+            data, _ = sock.recvfrom(65536)
+            msg = data.decode("utf-8", errors="replace")
+            try:
+                parsed = json.loads(msg)
+            except Exception:
+                parsed = msg
+            alarm_queue.appendleft(parsed)
+        except Exception as e:
+            alarm_queue.appendleft({"error": str(e), "raw": str(data)})
+
+# Запуск UDP-listener в отдельном потоке
+threading.Thread(target=udp_alarm_listener, daemon=True).start()
 
 def load_config():
     with open(CONFIG_PATH, 'r', encoding='utf-8') as f:
@@ -49,6 +84,16 @@ def get_default_urls(config):
     url = config.get('system', {}).get('rtsp_stream_url', '')
     return url, url
 
+def get_alarm_text():
+    # Возвращает последние тревоги в виде текста
+    lines = []
+    for alarm in list(alarm_queue):
+        if isinstance(alarm, dict):
+            lines.append(json.dumps(alarm, ensure_ascii=False))
+        else:
+            lines.append(str(alarm))
+    return '\n'.join(lines)
+
 def build_interface():
     config = load_config()
     flat_fields = flatten_config(config)
@@ -56,6 +101,7 @@ def build_interface():
 
     with gr.Blocks(title="Видеомониторинг и настройки") as demo:
         gr.Markdown("# Видеомониторинг и настройки")
+        # RTSP и видео
         with gr.Row():
             with gr.Column():
                 url1 = gr.Textbox(label="RTSP URL 1", value=default_url1, interactive=True)
@@ -63,6 +109,7 @@ def build_interface():
             with gr.Column():
                 url2 = gr.Textbox(label="RTSP URL 2", value=default_url2, interactive=True)
                 video2 = gr.HTML(rtsp_video_html(default_url2), elem_id="video2")
+        # Параметры config.yaml
         gr.Markdown("## Параметры config.yaml")
         param_inputs = {}
         with gr.Row():
@@ -73,6 +120,23 @@ def build_interface():
             save_btn = gr.Button("Сохранить")
             reset_btn = gr.Button("Сбросить")
         status = gr.Markdown(visible=False)
+        # Видео-анализ
+        gr.Markdown("## Анализ видео и тревоги")
+        with gr.Row():
+            video_input = gr.Video(label="Загрузите видео для анализа")
+            process_btn = gr.Button("Обработать видео")
+        with gr.Row():
+            video_output = gr.Video(label="Результат с bounding boxes")
+            log_output = gr.File(label="Журнал нарушений (JSON)")
+        with gr.Row():
+            sync_to_ml_btn = gr.Button("Обновить конфиг на ML")
+            sync_from_ml_btn = gr.Button("Загрузить конфиг с ML")
+        sync_status = gr.Markdown(visible=False)
+        gr.Markdown("## Последние тревоги (DSM Alarm Monitor)")
+        alarm_box = gr.Textbox(label="Последние тревоги (до 200)", lines=10, interactive=False)
+        def update_alarm_box():
+            return get_alarm_text()
+        gr.Timer(1, update_alarm_box, None, [alarm_box])
 
         def update_videos(u1, u2):
             return rtsp_video_html(u1), rtsp_video_html(u2)
@@ -102,7 +166,6 @@ def build_interface():
             return [url1, url2] + values + [gr.update(visible=True, value="🔄 Сброшено!")]
 
         def try_cast(val, orig):
-            # Приводим к типу оригинального значения
             if isinstance(orig, float):
                 try:
                     return float(val)
@@ -115,11 +178,27 @@ def build_interface():
                     return orig
             return val
 
+        def process_uploaded_video(video_file):
+            if video_file is None:
+                return None, None, gr.update(visible=True, value="❌ Не выбрано видео!")
+            out_path, log_path = process_video_rest(video_file)
+            return out_path, log_path, gr.update(visible=True, value="✅ Готово!")
+
+        def sync_to_ml_click():
+            msg = sync_config_to_ml()
+            return gr.update(visible=True, value=msg)
+
+        def sync_from_ml_click():
+            msg = sync_config_from_ml()
+            return gr.update(visible=True, value=msg)
+
         url1.change(update_videos, [url1, url2], [video1, video2])
         url2.change(update_videos, [url1, url2], [video1, video2])
         save_btn.click(save_all, [url1, url2] + list(param_inputs.values()), [status])
         reset_btn.click(reset_all, None, [url1, url2] + list(param_inputs.values()) + [status])
-
+        process_btn.click(process_uploaded_video, [video_input], [video_output, log_output, status])
+        sync_to_ml_btn.click(sync_to_ml_click, [], [sync_status])
+        sync_from_ml_btn.click(sync_from_ml_click, [], [sync_status])
     return demo
 
 def main():
