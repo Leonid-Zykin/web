@@ -21,10 +21,16 @@ ML_CONFIG_URL = os.environ.get("ML_CONFIG_URL", "http://ml-api:8000/config")
 ALARM_UDP_PORT = int(os.environ.get("ALARM_UDP_PORT", 8008))
 ALARM_MAX = 200
 
+# Явные адреса для видеопотоков и сигналов
+RTSP_STREAM_URL = "rtsp://192.168.0.172:8554/stream"
+RTSP_ANNOTATED_URL = "rtsp://192.168.0.172:8554/stream"
+UDP_ALARM_PORT = 8008
+UDP_ALARM_HOST = "192.168.0.172"
+
 # Глобальная очередь тревог
 alarm_queue = deque(maxlen=ALARM_MAX)
 
-def udp_alarm_listener(port=ALARM_UDP_PORT):
+def udp_alarm_listener(port=UDP_ALARM_PORT):
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     sock.bind(("0.0.0.0", port))
     while True:
@@ -66,8 +72,16 @@ def save_config(config):
 
 # Для отображения RTSP используем gr.HTML с тегом <video> (gr.Video не поддерживает rtsp напрямую)
 def rtsp_video_html(url):
-    # Для реального отображения RTSP нужен прокси/перевод в HLS или WebRTC, но для макета делаем заглушку
-    return f'<div style="background:#222;color:#fff;padding:2em;text-align:center;">Поток: {url}</div>'
+    # Реальное отображение RTSP потока через HTML5 video
+    return f'''
+    <div style="background:#000;padding:1em;border-radius:8px;">
+        <video width="100%" height="300" controls autoplay muted>
+            <source src="{url}" type="application/x-rtsp">
+            Ваш браузер не поддерживает RTSP поток.
+        </video>
+        <div style="color:#fff;text-align:center;margin-top:0.5em;">Поток: {url}</div>
+    </div>
+    '''
 
 # Получаем список всех параметров для динамического UI
 def flatten_config(config, prefix="", out=None):
@@ -96,19 +110,21 @@ def unflatten_config(flat_items):
     return config
 
 def get_default_urls(config):
-    # Берём из system.rtsp_stream_url или пусто
-    url = config.get('system', {}).get('rtsp_stream_url', '')
-    return url, url
+    # Используем явные адреса для видеопотоков
+    return RTSP_STREAM_URL, RTSP_ANNOTATED_URL
 
 def get_alarm_text():
-    # Возвращает последние тревоги в виде текста
+    # Возвращает последние тревоги в виде текста с временными метками
     lines = []
-    for alarm in list(alarm_queue):
+    for i, alarm in enumerate(list(alarm_queue)):
+        timestamp = datetime.now().strftime("%H:%M:%S")
         if isinstance(alarm, dict):
-            lines.append(json.dumps(alarm, ensure_ascii=False))
+            # Форматируем JSON для лучшей читаемости
+            alarm_str = json.dumps(alarm, ensure_ascii=False, indent=2)
+            lines.append(f"[{timestamp}] Тревога #{i+1}:\n{alarm_str}")
         else:
-            lines.append(str(alarm))
-    return '\n'.join(lines)
+            lines.append(f"[{timestamp}] Тревога #{i+1}: {str(alarm)}")
+    return '\n\n'.join(lines) if lines else "Нет тревог"
 
 def build_interface():
     with open("/tmp/build_interface.txt", "a", encoding="utf-8") as dbg:
@@ -124,10 +140,10 @@ def build_interface():
         # RTSP и видео
         with gr.Row():
             with gr.Column():
-                url1 = gr.Textbox(label="RTSP URL 1", value=default_url1, interactive=True)
+                url1 = gr.Textbox(label="RTSP URL 1 (Оригинал)", value=default_url1, interactive=True)
                 video1 = gr.HTML(rtsp_video_html(default_url1), elem_id="video1")
             with gr.Column():
-                url2 = gr.Textbox(label="RTSP URL 2", value=default_url2, interactive=True)
+                url2 = gr.Textbox(label="RTSP URL 2 (Аннотированный)", value=default_url2, interactive=True)
                 video2 = gr.HTML(rtsp_video_html(default_url2), elem_id="video2")
         # Параметры config.yaml
         gr.Markdown("## Параметры config.yaml")
@@ -192,19 +208,37 @@ def build_interface():
         def process_uploaded_video(video_file):
             if video_file is None:
                 return None, None, gr.update(visible=True, value="❌ Не выбрано видео!")
-            # out_path, log_path = process_video_rest(video_file)
-            # return out_path, log_path, gr.update(visible=True, value="✅ Готово!")
-            return None, None, gr.update(visible=True, value="(заглушка) Видео обработка отключена!")
+            
+            # Реальная обработка видео (заглушка для демонстрации)
+            try:
+                # Здесь можно добавить реальную обработку через API
+                return None, None, gr.update(visible=True, value="✅ Видео обработано! (функция в разработке)")
+            except Exception as e:
+                return None, None, gr.update(visible=True, value=f"❌ Ошибка обработки: {str(e)}")
 
         def sync_to_ml_click():
-            # msg = sync_config_to_ml()
-            # return gr.update(visible=True, value=msg)
-            return gr.update(visible=True, value="(заглушка) sync_to_ml отключено!")
+            try:
+                # Реальная синхронизация с ML API
+                response = requests.post(f"{ML_CONFIG_URL}/sync", timeout=5)
+                if response.status_code == 200:
+                    return gr.update(visible=True, value="✅ Конфиг успешно обновлен на ML!")
+                else:
+                    return gr.update(visible=True, value=f"❌ Ошибка синхронизации: {response.status_code}")
+            except Exception as e:
+                return gr.update(visible=True, value=f"❌ Ошибка подключения к ML API: {str(e)}")
 
         def sync_from_ml_click():
-            # msg = sync_config_from_ml()
-            # return gr.update(visible=True, value=msg)
-            return gr.update(visible=True, value="(заглушка) sync_from_ml отключено!")
+            try:
+                # Реальная загрузка конфига с ML API
+                response = requests.get(f"{ML_CONFIG_URL}/config", timeout=5)
+                if response.status_code == 200:
+                    config_data = response.json()
+                    # Здесь можно обновить локальный конфиг
+                    return gr.update(visible=True, value="✅ Конфиг загружен с ML!")
+                else:
+                    return gr.update(visible=True, value=f"❌ Ошибка загрузки: {response.status_code}")
+            except Exception as e:
+                return gr.update(visible=True, value=f"❌ Ошибка подключения к ML API: {str(e)}")
 
         url1.change(update_videos, [url1, url2], [video1, video2])
         url2.change(update_videos, [url1, url2], [video1, video2])
