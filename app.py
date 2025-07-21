@@ -170,6 +170,9 @@ def build_interface():
         
         start_streams_btn = gr.Button("▶️ Запустить / Обновить стримы")
 
+        gr.Markdown("### MJPEG-поток (для браузера)")
+        gr.HTML('<img src="http://localhost:5000/video" style="width:100%; max-width: 800px; border: 2px solid #444; border-radius: 8px;">')
+
         gr.Markdown("## Параметры config.yaml")
         param_inputs = {}
         
