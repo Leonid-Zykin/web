@@ -145,13 +145,22 @@ def build_interface():
             with gr.Column():
                 url2 = gr.Textbox(label="RTSP URL 2 (Аннотированный)", value=default_url2, interactive=True)
                 video2 = gr.HTML(rtsp_video_html(default_url2), elem_id="video2")
-        # Параметры config.yaml
+        
         gr.Markdown("## Параметры config.yaml")
         param_inputs = {}
+        
+        # Разделяем параметры на 4 столбца
+        param_list = list(flat_fields)
+        n = len(param_list)
+        chunk_size = (n + 3) // 4  # Округляем вверх, чтобы получить 4 колонки
+        chunks = [param_list[i:i + chunk_size] for i in range(0, n, chunk_size)]
+
         with gr.Row():
-            with gr.Column():
-                for key, value in flat_fields:
-                    param_inputs[key] = gr.Textbox(label=key, value=str(value), interactive=True)
+            for chunk in chunks:
+                with gr.Column():
+                    for key, value in chunk:
+                        param_inputs[key] = gr.Textbox(label=key, value=str(value), interactive=True)
+
         with gr.Row():
             save_btn = gr.Button("Сохранить")
             reset_btn = gr.Button("Сбросить")
