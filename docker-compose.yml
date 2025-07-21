@@ -28,7 +28,7 @@ services:
 
   mjpeg-server:
     build: .
-    command: python mjpeg_server.py
+    command: gunicorn -b 0.0.0.0:5000 mjpeg_server:app
     ports:
       - "5000:5000"
     restart: unless-stopped
