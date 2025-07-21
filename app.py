@@ -70,18 +70,41 @@ def save_config(config):
     except Exception as e:
         print(f"[ERROR] Failed to save config.yaml: {e}")
 
-# Для отображения RTSP используем gr.HTML с тегом <video> (gr.Video не поддерживает rtsp напрямую)
-def rtsp_video_html(url):
-    # Реальное отображение RTSP потока через HTML5 video
-    return f'''
-    <div style="background:#000;padding:1em;border-radius:8px;">
-        <video width="100%" height="300" controls autoplay muted>
-            <source src="{url}" type="application/x-rtsp">
-            Ваш браузер не поддерживает RTSP поток.
-        </video>
-        <div style="color:#fff;text-align:center;margin-top:0.5em;">Поток: {url}</div>
-    </div>
-    '''
+def stream_video(rtsp_url):
+    """
+    Генератор, который читает кадры из RTSP и отдает их для стриминга в gr.Image.
+    """
+    # Проверяем, что URL вообще передан, иначе OpenCV падает
+    if not rtsp_url:
+        print("RTSP URL is empty. Returning blank image.")
+        # Возвращаем пустой кадр-заглушку
+        blank_image = np.zeros((480, 640, 3), dtype=np.uint8)
+        cv2.putText(blank_image, "No RTSP link", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
+        while True:
+            yield blank_image
+            time.sleep(1)
+
+    while True: # Внешний цикл для переподключения
+        print(f"Connecting to RTSP stream: {rtsp_url}")
+        cap = cv2.VideoCapture(rtsp_url)
+        
+        if not cap.isOpened():
+            print(f"Error: Could not open stream at {rtsp_url}. Retrying in 5 seconds...")
+            cap.release()
+            time.sleep(5)
+            continue
+
+        while True: # Внутренний цикл для чтения кадров
+            ret, frame = cap.read()
+            if not ret:
+                print(f"Stream at {rtsp_url} ended. Reconnecting...")
+                break  # Выходим во внешний цикл для переподключения
+            
+            # Конвертируем BGR (OpenCV) в RGB (Gradio)
+            yield cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            time.sleep(1/25) # Ограничиваем до ~25 FPS, чтобы не нагружать CPU и сеть
+
+        cap.release()
 
 # Получаем список всех параметров для динамического UI
 def flatten_config(config, prefix="", out=None):
@@ -137,15 +160,16 @@ def build_interface():
 
     with gr.Blocks(title="Видеомониторинг и настройки") as demo:
         gr.Markdown("# Видеомониторинг и настройки")
-        # RTSP и видео
         with gr.Row():
             with gr.Column():
                 url1 = gr.Textbox(label="RTSP URL 1 (Оригинал)", value=default_url1, interactive=True)
-                video1 = gr.HTML(rtsp_video_html(default_url1), elem_id="video1")
+                video1 = gr.Image(label="Оригинальный поток", type="numpy", interactive=False, height=480, streaming=True)
             with gr.Column():
                 url2 = gr.Textbox(label="RTSP URL 2 (Аннотированный)", value=default_url2, interactive=True)
-                video2 = gr.HTML(rtsp_video_html(default_url2), elem_id="video2")
+                video2 = gr.Image(label="Аннотированный поток", type="numpy", interactive=False, height=480, streaming=True)
         
+        start_streams_btn = gr.Button("▶️ Запустить / Обновить стримы")
+
         gr.Markdown("## Параметры config.yaml")
         param_inputs = {}
         
@@ -182,15 +206,26 @@ def build_interface():
         def update_alarm_box():
             return get_alarm_text()
         gr.Timer(1, update_alarm_box, None, [alarm_box])
+        
+        def start_streaming(url):
+            # Эта функция-обертка будет yield'ить кадры из генератора
+            gen = stream_video(url)
+            for frame in gen:
+                yield frame
+        
+        # Запускаем стримы при загрузке приложения
+        demo.load(start_streaming, inputs=[url1], outputs=[video1])
+        demo.load(start_streaming, inputs=[url2], outputs=[video2])
 
-        def update_videos(u1, u2):
-            return rtsp_video_html(u1), rtsp_video_html(u2)
+        # Обновляем стримы по кнопке
+        start_streams_btn.click(start_streaming, inputs=[url1], outputs=[video1])
+        start_streams_btn.click(start_streaming, inputs=[url2], outputs=[video2])
 
         def save_all(url1, url2, *params):
             param_dict = {k: try_cast(params[i], flat_fields[i][1]) for i, (k, _) in enumerate(flat_fields)}
             config_new = unflatten_config(param_dict)
-            if 'system.rtsp_stream_url' in param_dict:
-                config_new['system']['rtsp_stream_url'] = url1
+            # Сохраняем URL в конфиг, если нужно
+            # config_new['system']['rtsp_stream_url'] = url1
             save_config(config_new)
             return gr.update(visible=True, value="✅ Изменения сохранены!")
 
@@ -249,8 +284,6 @@ def build_interface():
             except Exception as e:
                 return gr.update(visible=True, value=f"❌ Ошибка подключения к ML API: {str(e)}")
 
-        url1.change(update_videos, [url1, url2], [video1, video2])
-        url2.change(update_videos, [url1, url2], [video1, video2])
         save_btn.click(save_all, [url1, url2] + list(param_inputs.values()), [status])
         reset_btn.click(reset_all, None, [url1, url2] + list(param_inputs.values()) + [status])
         process_btn.click(process_uploaded_video, [video_input], [video_output, log_output, status])
