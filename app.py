@@ -25,7 +25,8 @@ ALARM_MAX = 200
 RTSP_STREAM_URL = "rtsp://192.168.0.172:8554/stream"
 RTSP_ANNOTATED_URL = "rtsp://192.168.0.172:8554/stream"
 UDP_ALARM_PORT = 8008
-UDP_ALARM_HOST = "192.168.0.172"
+UDP_ALARM_HOST = "192.168.0.173"
+DEFAULT_URL1 = "rtsp://192.168.0.172:8554/stream"
 
 # Глобальная очередь тревог
 alarm_queue = deque(maxlen=ALARM_MAX)
@@ -156,23 +157,21 @@ def build_interface():
     print("CONFIG FROM YAML:", config)
     flat_fields = flatten_config(config)
     print("FLATTENED CONFIG:", flat_fields)
-    default_url1, default_url2 = get_default_urls(config)
+    
 
     with gr.Blocks(title="Видеомониторинг и настройки") as demo:
         gr.Markdown("# Видеомониторинг и настройки")
         with gr.Row():
             with gr.Column():
-                url1 = gr.Textbox(label="RTSP URL 1 (Оригинал)", value=default_url1, interactive=True)
-                video1 = gr.Image(label="Оригинальный поток", type="numpy", interactive=False, height=480, streaming=True)
+                url1 = gr.Textbox(label="RTSP URL 1 (Оригинал)", value=DEFAULT_URL1, interactive=True)
+                gr.HTML('<img src="http://localhost:5000/video" style="width:100%; max-width: 800px; border: 2px solid #444; border-radius: 8px;">')
+                start_streams_btn = gr.Button("▶️ Запустить / Обновить стримы")
             with gr.Column():
-                url2 = gr.Textbox(label="RTSP URL 2 (Аннотированный)", value=default_url2, interactive=True)
-                video2 = gr.Image(label="Аннотированный поток", type="numpy", interactive=False, height=480, streaming=True)
-        
-        start_streams_btn = gr.Button("▶️ Запустить / Обновить стримы")
-
-        gr.Markdown("### MJPEG-поток (для браузера)")
-        gr.HTML('<img src="http://localhost:5000/video" style="width:100%; max-width: 800px; border: 2px solid #444; border-radius: 8px;">')
-
+                gr.Markdown("## Последние тревоги (DSM Alarm Monitor)")
+                alarm_box = gr.Textbox(label="Последние тревоги (до 200)", lines=10, interactive=False)
+                def update_alarm_box():
+                    return get_alarm_text()
+                gr.Timer(1, update_alarm_box, None, [alarm_box])   
         gr.Markdown("## Параметры config.yaml")
         param_inputs = {}
         
@@ -192,23 +191,21 @@ def build_interface():
             save_btn = gr.Button("Сохранить")
             reset_btn = gr.Button("Сбросить")
         status = gr.Markdown(visible=False)
-        # Видео-анализ
-        gr.Markdown("## Анализ видео и тревоги")
-        with gr.Row():
-            video_input = gr.Video(label="Загрузите видео для анализа")
-            process_btn = gr.Button("Обработать видео")
-        with gr.Row():
-            video_output = gr.Video(label="Результат с bounding boxes")
-            log_output = gr.File(label="Журнал нарушений (JSON)")
-        with gr.Row():
-            sync_to_ml_btn = gr.Button("Обновить конфиг на ML")
-            sync_from_ml_btn = gr.Button("Загрузить конфиг с ML")
-        sync_status = gr.Markdown(visible=False)
-        gr.Markdown("## Последние тревоги (DSM Alarm Monitor)")
-        alarm_box = gr.Textbox(label="Последние тревоги (до 200)", lines=10, interactive=False)
-        def update_alarm_box():
-            return get_alarm_text()
-        gr.Timer(1, update_alarm_box, None, [alarm_box])
+
+        
+        # # Видео-анализ
+        # gr.Markdown("## Анализ видео и тревоги")
+        # with gr.Row():
+        #     video_input = gr.Video(label="Загрузите видео для анализа")
+        #     process_btn = gr.Button("Обработать видео")
+        # with gr.Row():
+        #     video_output = gr.Video(label="Результат с bounding boxes")
+        #     log_output = gr.File(label="Журнал нарушений (JSON)")
+        # with gr.Row():
+        #     sync_to_ml_btn = gr.Button("Обновить конфиг на ML")
+        #     sync_from_ml_btn = gr.Button("Загрузить конфиг с ML")
+        # sync_status = gr.Markdown(visible=False)
+       
         
         def start_streaming(url):
             # Эта функция-обертка будет yield'ить кадры из генератора
@@ -217,14 +214,14 @@ def build_interface():
                 yield frame
         
         # Запускаем стримы при загрузке приложения
-        demo.load(start_streaming, inputs=[url1], outputs=[video1])
-        demo.load(start_streaming, inputs=[url2], outputs=[video2])
+        # demo.load(start_streaming, inputs=[url1], outputs=[video1])
+        # demo.load(start_streaming, inputs=[url2], outputs=[video2])
 
         # Обновляем стримы по кнопке
-        start_streams_btn.click(start_streaming, inputs=[url1], outputs=[video1])
-        start_streams_btn.click(start_streaming, inputs=[url2], outputs=[video2])
+        # start_streams_btn.click(start_streaming, inputs=[url1], outputs=[video1])
+        # start_streams_btn.click(start_streaming, inputs=[url2], outputs=[video2])
 
-        def save_all(url1, url2, *params):
+        def save_all(url1, *params):
             param_dict = {k: try_cast(params[i], flat_fields[i][1]) for i, (k, _) in enumerate(flat_fields)}
             config_new = unflatten_config(param_dict)
             # Сохраняем URL в конфиг, если нужно
@@ -236,8 +233,8 @@ def build_interface():
             config = load_config()
             flat_fields_new = flatten_config(config)
             values = [str(v) for _, v in flat_fields_new]
-            url1, url2 = get_default_urls(config)
-            return [url1, url2] + values + [gr.update(visible=True, value="🔄 Сброшено!")]
+            url1 = get_default_urls(config)
+            return [url1] + values + [gr.update(visible=True, value="🔄 Сброшено!")]
 
         def try_cast(val, orig):
             if isinstance(orig, float):
@@ -287,11 +284,11 @@ def build_interface():
             except Exception as e:
                 return gr.update(visible=True, value=f"❌ Ошибка подключения к ML API: {str(e)}")
 
-        save_btn.click(save_all, [url1, url2] + list(param_inputs.values()), [status])
-        reset_btn.click(reset_all, None, [url1, url2] + list(param_inputs.values()) + [status])
-        process_btn.click(process_uploaded_video, [video_input], [video_output, log_output, status])
-        sync_to_ml_btn.click(sync_to_ml_click, [], [sync_status])
-        sync_from_ml_btn.click(sync_from_ml_click, [], [sync_status])
+        save_btn.click(save_all, [url1] + list(param_inputs.values()), [status])
+        reset_btn.click(reset_all, None, [url1] + list(param_inputs.values()) + [status])
+        # process_btn.click(process_uploaded_video, [video_input], [video_output, log_output, status])
+        # sync_to_ml_btn.click(sync_to_ml_click, [], [sync_status])
+        # sync_from_ml_btn.click(sync_from_ml_click, [], [sync_status])
     return demo
 
 def main():
