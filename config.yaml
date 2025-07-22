@@ -23,8 +23,8 @@ phone:
 system:
   alarm_enabled: true
   alarm_event_delay: 2.0
-  alarm_server_ip: post.onnx
-  alarm_server_port: 10000
+  alarm_server_ip: 192.168.0.173  # Указать IP машины с gradio-app
+  alarm_server_port: 8008
   model: 'True'
   post_model: '2.0'
   rtsp_stream_url: rtsp://rtsp-server:8554/stream
