@@ -12,6 +12,7 @@ import requests
 import socket
 from collections import deque
 import websocket  # pip install websocket-client
+import subprocess
 
 CONFIG_PATH = os.path.join(os.path.dirname(__file__), 'config.yaml')
 RESULTS_DIR = os.path.join(os.path.dirname(__file__), 'results')
@@ -57,6 +58,29 @@ def save_config(config):
             yaml.dump(config, f, allow_unicode=True)
     except Exception as e:
         print(f"[ERROR] Failed to save config.yaml: {e}")
+
+def send_config_to_rockchip():
+    # Загружаем параметры Rockchip из config.yaml
+    with open(CONFIG_PATH, 'r', encoding='utf-8') as f:
+        config = yaml.safe_load(f)
+    rockchip = config.get('rockchip', {})
+    ip = rockchip.get('ip')
+    user = rockchip.get('user')
+    password = rockchip.get('password')
+    remote_path = rockchip.get('config_path')
+    if not all([ip, user, password, remote_path]):
+        return False, 'Не все параметры Rockchip заданы в config.yaml'
+    # Используем sshpass для передачи пароля (sshpass должен быть установлен)
+    local_path = CONFIG_PATH
+    scp_cmd = [
+        'sshpass', '-p', password,
+        'scp', '-o', 'StrictHostKeyChecking=no', local_path, f'{user}@{ip}:{remote_path}'
+    ]
+    try:
+        result = subprocess.run(scp_cmd, check=True, capture_output=True, text=True)
+        return True, 'Конфиг отправлен на Rockchip!'
+    except subprocess.CalledProcessError as e:
+        return False, f'Ошибка отправки конфига: {e.stderr}'
 
 def stream_video(rtsp_url):
     if not rtsp_url:
@@ -119,13 +143,13 @@ def get_raw_udp_text():
 def build_interface():
     config = load_config()
     flat_fields = flatten_config(config)
+    rockchip = config.get('rockchip', {})
     with gr.Blocks(title="Видеомониторинг и настройки") as demo:
         gr.Markdown("# Видеомониторинг и настройки")
         with gr.Row():
             with gr.Column():
                 url1 = gr.Textbox(label="RTSP URL 1 (Оригинал)", value=DEFAULT_URL1, interactive=True)
                 gr.HTML('<img src="http://localhost:5000/video" style="width:100%; max-width: 800px; border: 2px solid #444; border-radius: 8px;">')
-                # start_streams_btn = gr.Button("▶️ Запустить / Обновить стримы")
             with gr.Column():
                 def update_alarm_box():
                     print(f"[Gradio] update_alarm_box called, raw_udp_log size: {len(raw_udp_log)}")
@@ -145,12 +169,26 @@ def build_interface():
         with gr.Row():
             save_btn = gr.Button("Сохранить")
             reset_btn = gr.Button("Сбросить")
+        # --- Rockchip IP ---
+        with gr.Row():
+            rockchip_ip_box = gr.Textbox(label="IP Rockchip", value=rockchip.get('ip', ''), interactive=True)
+            save_ip_btn = gr.Button("Сохранить IP Rockchip")
         status = gr.Markdown(visible=False)
         def save_all(url1, *params):
             param_dict = {k: try_cast(params[i], flat_fields[i][1]) for i, (k, _) in enumerate(flat_fields)}
             config_new = unflatten_config(param_dict)
             save_config(config_new)
-            return gr.update(visible=True, value="✅ Изменения сохранены!")
+            ok, msg = send_config_to_rockchip()
+            return gr.update(visible=True, value=(msg if ok else f"❌ {msg}"))
+        def save_rockchip_ip(ip):
+            with open(CONFIG_PATH, 'r', encoding='utf-8') as f:
+                config = yaml.safe_load(f)
+            if 'rockchip' not in config:
+                config['rockchip'] = {}
+            config['rockchip']['ip'] = ip
+            with open(CONFIG_PATH, 'w', encoding='utf-8') as f:
+                yaml.dump(config, f, allow_unicode=True)
+            return gr.update(visible=True, value=f"IP Rockchip сохранён: {ip}")
         def reset_all():
             config = load_config()
             flat_fields_new = flatten_config(config)
@@ -171,6 +209,7 @@ def build_interface():
             return val
         save_btn.click(save_all, [url1] + list(param_inputs.values()), [status])
         reset_btn.click(reset_all, None, [url1] + list(param_inputs.values()) + [status])
+        save_ip_btn.click(save_rockchip_ip, [rockchip_ip_box], [status])
         def update_alarm_box():
             return get_raw_udp_text()
     return demo

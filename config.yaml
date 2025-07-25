@@ -1,5 +1,5 @@
 cigarette:
-  duration: 1.533423
+  duration: 1.8
   threshold: 1.0
 closed_eyes:
   duration: 0.5
@@ -20,10 +20,15 @@ no_face:
 phone:
   duration: 0.25
   threshold: 1.0
+rockchip:
+  config_path: /home/orangepi/opi5test/core/config.yaml
+  ip: 192.168.0.172
+  password: orangepi
+  user: orangepi
 system:
   alarm_enabled: true
   alarm_event_delay: 2.0
-  alarm_server_ip: 192.168.0.173  # Указать IP машины с gradio-app
+  alarm_server_ip: 192.168.0.173
   alarm_server_port: 8008
   model: 'True'
   post_model: '2.0'
