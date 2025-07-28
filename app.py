@@ -82,6 +82,65 @@ def send_config_to_rockchip():
     except subprocess.CalledProcessError as e:
         return False, f'Ошибка отправки конфига: {e.stderr}'
 
+def get_log_files_from_rockchip():
+    """Получает список файлов логов с Rockchip"""
+    with open(CONFIG_PATH, 'r', encoding='utf-8') as f:
+        config = yaml.safe_load(f)
+    rockchip = config.get('rockchip', {})
+    ip = rockchip.get('ip')
+    user = rockchip.get('user')
+    password = rockchip.get('password')
+    
+    if not all([ip, user, password]):
+        return []
+    
+    # Команда для получения списка файлов логов
+    ssh_cmd = [
+        'sshpass', '-p', password,
+        'ssh', '-o', 'StrictHostKeyChecking=no',
+        f'{user}@{ip}',
+        'ls -1 /home/orangepi/opi5test/logs/alarms_*.log 2>/dev/null || echo ""'
+    ]
+    
+    try:
+        result = subprocess.run(ssh_cmd, check=True, capture_output=True, text=True)
+        files = result.stdout.strip().split('\n')
+        # Извлекаем только имена файлов
+        log_files = [os.path.basename(f) for f in files if f.strip()]
+        return sorted(log_files, reverse=True)  # Новые файлы первыми
+    except subprocess.CalledProcessError as e:
+        print(f"[ERROR] Failed to get log files: {e.stderr}")
+        return []
+
+def get_log_content_from_rockchip(filename):
+    """Получает содержимое файла лога с Rockchip"""
+    with open(CONFIG_PATH, 'r', encoding='utf-8') as f:
+        config = yaml.safe_load(f)
+    rockchip = config.get('rockchip', {})
+    ip = rockchip.get('ip')
+    user = rockchip.get('user')
+    password = rockchip.get('password')
+    
+    if not all([ip, user, password]):
+        return "Ошибка: не заданы параметры Rockchip"
+    
+    if not filename:
+        return "Выберите файл лога"
+    
+    # Команда для получения содержимого файла
+    ssh_cmd = [
+        'sshpass', '-p', password,
+        'ssh', '-o', 'StrictHostKeyChecking=no',
+        f'{user}@{ip}',
+        f'cat /home/orangepi/opi5test/logs/{filename}'
+    ]
+    
+    try:
+        result = subprocess.run(ssh_cmd, check=True, capture_output=True, text=True)
+        return result.stdout
+    except subprocess.CalledProcessError as e:
+        return f"Ошибка чтения файла: {e.stderr}"
+
 def stream_video(rtsp_url):
     if not rtsp_url:
         print("RTSP URL is empty. Returning blank image.")
@@ -155,6 +214,30 @@ def build_interface():
                     print(f"[Gradio] update_alarm_box called, raw_udp_log size: {len(raw_udp_log)}")
                     return get_raw_udp_text()
                 alarm_box = gr.Textbox(label="RAW UDP тревоги (json)", value=update_alarm_box, lines=38, interactive=False, elem_id="alarm_box", every=2)
+        
+        # --- Логи тревог ---
+        gr.Markdown("## Логи тревог")
+        with gr.Row():
+            with gr.Column():
+                log_file_dropdown = gr.Dropdown(label="Выберите файл лога", choices=[], interactive=True)
+                refresh_logs_btn = gr.Button("🔄 Обновить список логов")
+            with gr.Column():
+                log_content_box = gr.Textbox(label="Содержимое лога", lines=20, interactive=False)
+        with gr.Row():
+            load_log_btn = gr.Button("📖 Загрузить лог")
+        
+        def refresh_log_files():
+            log_files = get_log_files_from_rockchip()
+            return gr.update(choices=log_files)
+        
+        def load_log_content(filename):
+            if not filename:
+                return "Выберите файл лога"
+            return get_log_content_from_rockchip(filename)
+        
+        refresh_logs_btn.click(refresh_log_files, outputs=[log_file_dropdown])
+        load_log_btn.click(load_log_content, inputs=[log_file_dropdown], outputs=[log_content_box])
+        
         gr.Markdown("## Параметры config.yaml")
         param_inputs = {}
         param_list = list(flat_fields)
