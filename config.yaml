@@ -22,7 +22,7 @@ phone:
   threshold: 1.0
 rockchip:
   config_path: /home/orangepi/opi5test/core/config.yaml
-  ip: 192.168.0.172
+  ip: 192.168.0.174
   password: orangepi
   user: orangepi
 system:

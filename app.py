@@ -18,21 +18,17 @@ CONFIG_PATH = os.path.join(os.path.dirname(__file__), 'config.yaml')
 RESULTS_DIR = os.path.join(os.path.dirname(__file__), 'results')
 os.makedirs(RESULTS_DIR, exist_ok=True)
 
-ML_API_URL = os.environ.get("ML_API_URL", "http://ml-api:8000/infer")
-ML_CONFIG_URL = os.environ.get("ML_CONFIG_URL", "http://ml-api:8000/config")
 ALARM_MAX = 200
 
 # Явные адреса для видеопотоков и сигналов
-RTSP_STREAM_URL = "rtsp://192.168.0.172:8554/stream"
-RTSP_ANNOTATED_URL = "rtsp://192.168.0.172:8554/stream"
-DEFAULT_URL1 = "rtsp://192.168.0.172:8554/stream"
+DEFAULT_URL1 = "rtsp://192.168.0.174:8554/stream"
 
 # Глобальная очередь тревог
 # Глобальный лог сырых UDP сообщений
 raw_udp_log = deque(maxlen=ALARM_MAX)
 
 # --- WebSocket listener ---
-WS_URL = os.environ.get("ALARM_WS_URL", "ws://localhost:8008")  # поменяйте на ваш адрес
+WS_URL = os.environ.get("ALARM_WS_URL", "ws://localhost:8008") 
 
 
 
