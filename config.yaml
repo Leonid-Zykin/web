@@ -1,39 +1,32 @@
 cigarette:
-  duration: 1.8
-  threshold: 1.0
+  duration: 0.1
+  threshold: 0.8
 closed_eyes:
-  duration: 0.5
-  threshold: 2.0
+  duration: 1.0
+  threshold: 0.8
+closed_eyes_duration:
+  tracking_window: 60  # Время отслеживания в секундах (последняя минута)
+  threshold: 10        # Пороговое значение в секундах (максимальное время закрытых глаз)
 head_pose:
-  duration: 0.5
+  duration: 1.8
   pitch: 0.5
   yaw: 1.5
 no_belt:
-  duration: 20.0
-  threshold: 2.0
+  duration: 1.5
+  threshold: 0.8
 no_driver:
   duration: 0.5
-  threshold: 0.5
+  threshold: 0.8
 no_face:
-  duration: 1.0
-  threshold: 0.5
+  duration: 0.5
+  threshold: 0.8
 phone:
-  duration: 0.25
-  threshold: 1.0
-rockchip:
-  config_path: /home/orangepi/opi5test/core/config.yaml
-  ip: 192.168.0.174
-  password: orangepi
-  user: orangepi
+  duration: 0.5
+  threshold: 0.8
 system:
-  alarm_enabled: true
-  alarm_event_delay: 2.0
-  alarm_server_ip: 192.168.0.173
-  alarm_server_port: 8008
-  model: 'True'
-  post_model: '2.0'
-  rtsp_stream_url: rtsp://rtsp-server:8554/stream
-  shape_predictor: '10000'
+  rtsp_stream_url: rtsp://192.168.0.173:8554/stream  # URL для получения исходного видеопотока
+  alarm_host: '192.168.0.173'  # Хост для отправки тревог
+  alarm_port: 8008         # Порт для отправки тревог
 yawn:
-  duration: 2.0
-  threshold: 0.4
+  duration: 0.5
+  threshold: 0.3

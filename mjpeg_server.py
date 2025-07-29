@@ -4,7 +4,7 @@ import threading
 
 app = Flask(__name__)
 
-RTSP_URL = "rtsp://192.168.0.172:8554/stream"
+RTSP_URL = "rtsp://192.168.0.174:8554/stream"
 
 # Глобальные переменные для обмена кадрами между потоками
 latest_frame = None
