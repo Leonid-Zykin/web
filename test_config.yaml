@@ -1,0 +1,9 @@
+rockchip:
+  config_path: /tmp/test_config.yaml
+  ip: localhost
+  password: test
+  user: test
+system:
+  alarm_host: localhost
+  alarm_port: 8008
+  rtsp_stream_url: rtsp://localhost:8554/stream

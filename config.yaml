@@ -21,11 +21,14 @@ phone:
   duration: 0.25
   threshold: 1.0
 rockchip:
-  config_path: /home/orangepi/opi5test/core/config.yaml
-  ip: 192.168.0.172
-  password: orangepi
+  ip: localhost  # Изменено с 192.168.0.172 на localhost для тестирования
   user: orangepi
+  password: orangepi
+  config_path: /home/orangepi/opi5test/core/config.yaml
 system:
+  # Настройки системы
+  debug: true
+  log_level: INFO
   alarm_enabled: true
   alarm_event_delay: 2.0
   alarm_server_ip: 192.168.0.173
@@ -37,3 +40,19 @@ system:
 yawn:
   duration: 2.0
   threshold: 0.4
+
+# Настройки видеопотоков
+video:
+  rtsp_url: rtsp://localhost:8554/stream  # Изменено на localhost
+  mjpeg_url: http://localhost:5000/video_feed
+
+# Настройки тревог
+alarms:
+  max_alarms: 200
+  udp_port: 8008
+  websocket_url: ws://localhost:8008
+
+# Настройки интерфейса
+interface:
+  theme: "default"
+  language: "ru"
