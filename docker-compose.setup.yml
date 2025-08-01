@@ -1,0 +1,21 @@
+version: '3.8'
+services:
+  gradio-app:
+    build: .
+    platform: linux/amd64
+    ports:
+      - "7860:7860"
+      - "8008:8008/udp"
+    volumes:
+      - ./config.yaml:/app/config.yaml
+    restart: unless-stopped
+    depends_on:
+      - mjpeg-server
+
+  
+  mjpeg-server:
+    build: .
+    command: gunicorn -b 0.0.0.0:5000 mjpeg_server:app
+    ports:
+      - "5000:5000"
+    restart: unless-stopped

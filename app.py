@@ -30,21 +30,53 @@ raw_udp_log = deque(maxlen=ALARM_MAX)
 # --- WebSocket listener ---
 WS_URL = os.environ.get("ALARM_WS_URL", "ws://localhost:8008") 
 
-
+# Словарь переводов параметров на русский язык
+PARAM_TRANSLATIONS = {
+    # Системные параметры
+    'system.model': 'Модель YOLO',
+    'system.rtsp_stream_url': 'URL исходного видеопотока',
+    'system.shape_predictor': 'Файл shape_predictor',
+    'system.alarm_host': 'Хост для тревог',
+    'system.alarm_port': 'Порт для тревог',
+    'system.target_host': 'Дополнительный хост',
+    'system.target_port': 'Дополнительный порт',
+    'system.output_stream_url': 'URL обработанного потока',
+    
+    # Параметры нарушений
+    'cigarette.duration': 'Длительность курения (сек)',
+    'cigarette.threshold': 'Порог курения',
+    'closed_eyes.duration': 'Длительность закрытых глаз (сек)',
+    'closed_eyes.threshold': 'Порог закрытых глаз',
+    'closed_eyes_duration.tracking_window': 'Окно отслеживания (сек)',
+    'closed_eyes_duration.threshold': 'Порог времени закрытых глаз (сек)',
+    'head_pose.duration': 'Длительность поворота головы (сек)',
+    'head_pose.pitch': 'Угол наклона головы',
+    'head_pose.yaw': 'Угол поворота головы',
+    'no_belt.duration': 'Длительность отсутствия ремня (сек)',
+    'no_belt.threshold': 'Порог отсутствия ремня',
+    'no_driver.duration': 'Длительность отсутствия водителя (сек)',
+    'no_driver.threshold': 'Порог отсутствия водителя',
+    'no_face.duration': 'Длительность отсутствия лица (сек)',
+    'no_face.threshold': 'Порог отсутствия лица',
+    'phone.duration': 'Длительность использования телефона (сек)',
+    'phone.threshold': 'Порог использования телефона',
+    'yawn.duration': 'Длительность зевоты (сек)',
+    'yawn.threshold': 'Порог зевоты',
+    
+    # Параметры Rockchip
+    'rockchip.ip': 'IP адрес Rockchip',
+    'rockchip.user': 'Пользователь Rockchip',
+    'rockchip.password': 'Пароль Rockchip',
+    'rockchip.config_path': 'Путь к конфигу на Rockchip'
+}
 
 # --- Остальной код без изменений, кроме get_alarm_text и интерфейса ---
 def load_config():
     try:
-        with open("/tmp/build_interface.txt", "a", encoding="utf-8") as dbg:
-            dbg.write("load_config: start\n")
         with open(CONFIG_PATH, 'r', encoding='utf-8') as f:
             data = yaml.safe_load(f)
-        with open("/tmp/build_interface.txt", "a", encoding="utf-8") as dbg:
-            dbg.write(f"load_config: success {data}\n")
         return data
     except Exception as e:
-        with open("/tmp/build_interface.txt", "a", encoding="utf-8") as dbg:
-            dbg.write(f"load_config: error {e}\n")
         print(f"[ERROR] Failed to load config.yaml: {e}")
         return {}
 
@@ -169,8 +201,6 @@ def flatten_config(config, prefix="", out=None):
         if isinstance(v, dict):
             flatten_config(v, prefix + k + ".", out)
         else:
-            with open("/tmp/flatten_debug.txt", "a", encoding="utf-8") as dbg:
-                dbg.write(f"{prefix + k} = {v} ({type(v)})\n")
             out.append((prefix + k, v))
     return out
 
@@ -187,7 +217,11 @@ def unflatten_config(flat_items):
     return config
 
 def get_default_urls(config):
-    return RTSP_STREAM_URL, RTSP_ANNOTATED_URL
+    """Получает URL из конфигурации или возвращает значения по умолчанию"""
+    system_config = config.get('system', {})
+    rtsp_stream_url = system_config.get('rtsp_stream_url', DEFAULT_URL1)
+    rtsp_annotated_url = system_config.get('rtsp_annotated_url', DEFAULT_URL1)
+    return rtsp_stream_url, rtsp_annotated_url
 
 def get_raw_udp_text():
     lines = list(raw_udp_log)
@@ -199,15 +233,18 @@ def build_interface():
     config = load_config()
     flat_fields = flatten_config(config)
     rockchip = config.get('rockchip', {})
+    
+    # Получаем URL из конфигурации
+    rtsp_stream_url, rtsp_annotated_url = get_default_urls(config)
+    
     with gr.Blocks(title="Видеомониторинг и настройки") as demo:
         gr.Markdown("# Видеомониторинг и настройки")
         with gr.Row():
             with gr.Column():
-                url1 = gr.Textbox(label="RTSP URL 1 (Оригинал)", value=DEFAULT_URL1, interactive=True)
+                url1 = gr.Textbox(label="RTSP URL 1 (Оригинал)", value=rtsp_stream_url, interactive=True)
                 gr.HTML('<img src="http://localhost:5000/video" style="width:100%; max-width: 800px; border: 2px solid #444; border-radius: 8px;">')
             with gr.Column():
                 def update_alarm_box():
-                    print(f"[Gradio] update_alarm_box called, raw_udp_log size: {len(raw_udp_log)}")
                     return get_raw_udp_text()
                 alarm_box = gr.Textbox(label="RAW UDP тревоги (json)", value=update_alarm_box, lines=38, interactive=False, elem_id="alarm_box", every=2)
         
@@ -244,7 +281,7 @@ def build_interface():
             for chunk in chunks:
                 with gr.Column():
                     for key, value in chunk:
-                        param_inputs[key] = gr.Textbox(label=key, value=str(value), interactive=True)
+                        param_inputs[key] = gr.Textbox(label=PARAM_TRANSLATIONS.get(key, key), value=str(value), interactive=True)
         with gr.Row():
             save_btn = gr.Button("Сохранить")
             reset_btn = gr.Button("Сбросить")
@@ -272,8 +309,8 @@ def build_interface():
             config = load_config()
             flat_fields_new = flatten_config(config)
             values = [str(v) for _, v in flat_fields_new]
-            url1 = get_default_urls(config)
-            return [url1] + values + [gr.update(visible=True, value="🔄 Сброшено!")]
+            rtsp_stream_url, rtsp_annotated_url = get_default_urls(config)
+            return [rtsp_stream_url] + values + [gr.update(visible=True, value="🔄 Сброшено!")]
         def try_cast(val, orig):
             if isinstance(orig, float):
                 try:
@@ -289,8 +326,6 @@ def build_interface():
         save_btn.click(save_all, [url1] + list(param_inputs.values()), [status])
         reset_btn.click(reset_all, None, [url1] + list(param_inputs.values()) + [status])
         save_ip_btn.click(save_rockchip_ip, [rockchip_ip_box], [status])
-        def update_alarm_box():
-            return get_raw_udp_text()
     return demo
 
 # --- UDP listener for DSM alarms ---
