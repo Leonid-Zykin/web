@@ -67,7 +67,8 @@ PARAM_TRANSLATIONS = {
     'rockchip.ip': 'IP адрес Rockchip',
     'rockchip.user': 'Пользователь Rockchip',
     'rockchip.password': 'Пароль Rockchip',
-    'rockchip.config_path': 'Путь к конфигу на Rockchip'
+    'rockchip.config_path': 'Путь к конфигу на Rockchip',
+    'rockchip.api_port': 'Порт API сервиса'
 }
 
 # --- Остальной код без изменений, кроме get_alarm_text и интерфейса ---
@@ -109,6 +110,36 @@ def send_config_to_rockchip():
         return True, 'Конфиг отправлен на Rockchip!'
     except subprocess.CalledProcessError as e:
         return False, f'Ошибка отправки конфига: {e.stderr}'
+
+def send_config_via_api():
+    """Отправляет конфиг на рокчип через API вместо SCP"""
+    try:
+        # Загружаем конфиг
+        with open(CONFIG_PATH, 'r', encoding='utf-8') as f:
+            config = yaml.safe_load(f)
+        
+        # Получаем параметры API из конфига
+        rockchip = config.get('rockchip', {})
+        api_host = rockchip.get('ip', '192.168.0.173')
+        api_port = rockchip.get('api_port', 8000)
+        
+        # Формируем URL API
+        api_url = f"http://{api_host}:{api_port}/config"
+        
+        # Отправляем конфиг через API
+        response = requests.put(api_url, json=config, timeout=10)
+        
+        if response.status_code == 200:
+            return True, f'Конфиг успешно отправлен через API на {api_host}:{api_port}'
+        else:
+            return False, f'Ошибка API: {response.status_code} - {response.text}'
+            
+    except requests.exceptions.ConnectionError:
+        return False, f'Не удалось подключиться к API на {api_host}:{api_port}. Проверьте, запущен ли API сервис.'
+    except requests.exceptions.Timeout:
+        return False, 'Таймаут подключения к API'
+    except Exception as e:
+        return False, f'Ошибка отправки через API: {str(e)}'
 
 def get_log_files_from_rockchip():
     """Получает список файлов логов с Rockchip"""
@@ -284,6 +315,7 @@ def build_interface():
                         param_inputs[key] = gr.Textbox(label=PARAM_TRANSLATIONS.get(key, key), value=str(value), interactive=True)
         with gr.Row():
             save_btn = gr.Button("Сохранить")
+            api_send_btn = gr.Button("Отправить через API", variant="secondary")
             reset_btn = gr.Button("Сбросить")
         # --- Rockchip IP ---
         with gr.Row():
@@ -296,6 +328,15 @@ def build_interface():
             save_config(config_new)
             ok, msg = send_config_to_rockchip()
             return gr.update(visible=True, value=(msg if ok else f"❌ {msg}"))
+        
+        def send_all_via_api(url1, *params):
+            """Сохраняет конфиг локально и отправляет через API"""
+            param_dict = {k: try_cast(params[i], flat_fields[i][1]) for i, (k, _) in enumerate(flat_fields)}
+            config_new = unflatten_config(param_dict)
+            save_config(config_new)
+            ok, msg = send_config_via_api()
+            return gr.update(visible=True, value=(msg if ok else f"❌ {msg}"))
+        
         def save_rockchip_ip(ip):
             with open(CONFIG_PATH, 'r', encoding='utf-8') as f:
                 config = yaml.safe_load(f)
@@ -325,6 +366,7 @@ def build_interface():
             return val
         save_btn.click(save_all, [url1] + list(param_inputs.values()), [status])
         reset_btn.click(reset_all, None, [url1] + list(param_inputs.values()) + [status])
+        api_send_btn.click(send_all_via_api, [url1] + list(param_inputs.values()), [status])
         save_ip_btn.click(save_rockchip_ip, [rockchip_ip_box], [status])
     return demo
 

@@ -35,3 +35,9 @@ system:
 yawn:
   duration: 0.5
   threshold: 0.3
+rockchip:
+  ip: '192.168.0.173'  # IP адрес рокчипа
+  user: 'orangepi'      # Пользователь для SSH подключения
+  password: 'orangepi'  # Пароль для SSH подключения
+  config_path: '/home/orangepi/opi5test/core/config.yaml'  # Путь к конфигу на рокчипе
+  api_port: 8000        # Порт API сервиса на рокчипе
