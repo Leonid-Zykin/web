@@ -24,9 +24,14 @@ phone:
   duration: 0.5
   threshold: 0.8
 system:
+  model: './yolo11'
   rtsp_stream_url: rtsp://192.168.0.173:8554/stream  # URL для получения исходного видеопотока
+  shape_predictor: 'shape_predictor_68_face_landmarks.dat'
   alarm_host: '192.168.0.173'  # Хост для отправки тревог
   alarm_port: 8008         # Порт для отправки тревог
+  target_host: '192.168.0.173' # Хост для отправки тревог (используется в send_dsm_alarm)
+  target_port: 10000       # Порт для отправки тревог (используется в send_dsm_alarm)
+  output_stream_url: 'rtsp://localhost:8554/processed'  # URL для публикации обработанного видеопотока
 yawn:
   duration: 0.5
   threshold: 0.3
