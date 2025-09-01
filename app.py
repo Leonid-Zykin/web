@@ -71,10 +71,6 @@ WS_URL = os.environ.get("ALARM_WS_URL", "ws://localhost:8008")
 web_config = load_web_config()
 API_BASE_URL = f"http://{web_config['api_host']}:{web_config['api_port']}"  # Базовый URL для API
 
-
-
-
-
 def load_config_from_api():
     """Загружает конфигурацию через API"""
     try:
@@ -155,8 +151,6 @@ def send_config_via_api():
     except Exception as e:
         return False, f'Ошибка отправки через API: {str(e)}'
 
-
-
 def stream_video(rtsp_url):
     if not rtsp_url:
         print("RTSP URL is empty. Returning blank image.")
@@ -181,8 +175,6 @@ def stream_video(rtsp_url):
             yield cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
             time.sleep(1/25)
         cap.release()
-
-
 
 def get_default_urls(config):
     """Получает URL из конфигурации или возвращает значения по умолчанию"""
@@ -236,8 +228,6 @@ def build_interface():
                 reset_config_btn = gr.Button("🔄 Сбросить к умолчанию", variant="secondary")
             
             status_msg = gr.Markdown("")
-            
-
             
             def test_api_connection(host, port):
                 """Проверяет подключение к API"""
@@ -308,10 +298,7 @@ def build_interface():
                 outputs=[status_msg]
             )
             
-
-            
             return demo
-    
 
     rockchip = config.get('rockchip', {})
     
@@ -336,10 +323,6 @@ def build_interface():
                     return "Окно очищено"
                 
                 clear_alarm_btn = gr.Button("🗑️ Очистить окно тревог", variant="secondary")
-        
-
-        
-
         
         # --- Параметры config.yaml ---
         gr.Markdown("## Параметры конфигурации")
@@ -404,10 +387,6 @@ def build_interface():
                                     'threshold': threshold_input
                                 }
         
-
-        
-
-        
         # --- Rockchip IP ---
         with gr.Row():
             rockchip_ip_box = gr.Textbox(label="IP Rockchip", value=rockchip.get('ip', ''), interactive=True)
@@ -415,28 +394,88 @@ def build_interface():
         
         status = gr.Markdown(visible=False)
         
-        # --- Обработчики событий ---
-
+        # Собираем все поля блоков тревог для обновления
+        violation_fields = []
+        for violation_type, fields in violation_blocks.items():
+            violation_fields.extend([fields['enable'], fields['duration'], fields['threshold']])
         
-        def send_all_via_api(url1, rockchip_ip):
-            """Отправляет конфиг через API"""
-            # Обновляем IP Rockchip если он изменился
-            if rockchip_ip:
-                update_config_param('rockchip', 'ip', rockchip_ip)
-            
-            # Затем отправляем через API с новым IP
-            ok, msg = send_config_via_api()
-            if ok:
-                return gr.update(visible=True, value=f"✅ {msg}")
-            else:
-                return gr.update(visible=True, value=f"❌ {msg}")
+        # --- Обработчики событий ---
+        
+        def send_all_via_api(url1, rockchip_ip, *violation_values):
+            """Отправляет только измененные параметры конфигурации через API"""
+            try:
+                # Получаем текущий конфиг из API
+                current_config = load_config_from_api()
+                if not current_config:
+                    return gr.update(visible=True, value="❌ Не удалось загрузить текущий конфиг из API")
+                
+                # Собираем текущие значения из интерфейса
+                current_values = {}
+                
+                # Обрабатываем IP Rockchip
+                if rockchip_ip and rockchip_ip != current_config.get('rockchip', {}).get('ip', ''):
+                    current_values['rockchip.ip'] = rockchip_ip
+                
+                # Обрабатываем значения нарушений
+                violation_items = list(VIOLATION_TRANSLATIONS.keys())
+                value_index = 0
+                
+                for violation_type in violation_items:
+                    # Получаем значения из интерфейса (3 значения на каждое нарушение: enable, duration, threshold)
+                    enable_val = violation_values[value_index]
+                    duration_val = float(violation_values[value_index + 1]) if violation_values[value_index + 1] else 5.0
+                    threshold_val = float(violation_values[value_index + 2]) if violation_values[value_index + 2] else 0.5
+                    
+                    # Получаем текущие значения из конфига
+                    current_violation = current_config.get(violation_type, {})
+                    current_enable = current_violation.get('enable', True)
+                    current_duration = current_violation.get('duration', 5.0)
+                    current_threshold = current_violation.get('threshold', 0.5)
+                    
+                    # Сравниваем и добавляем измененные значения
+                    if enable_val != current_enable:
+                        current_values[f'{violation_type}.enable'] = enable_val
+                    
+                    if abs(duration_val - current_duration) > 0.001:  # Учитываем погрешность float
+                        current_values[f'{violation_type}.duration'] = duration_val
+                    
+                    if abs(threshold_val - current_threshold) > 0.001:  # Учитываем погрешность float
+                        current_values[f'{violation_type}.threshold'] = threshold_val
+                    
+                    value_index += 3
+                
+                # Если нет изменений
+                if not current_values:
+                    return gr.update(visible=True, value="✅ Нет изменений для отправки")
+                
+                # Отправляем только измененные параметры
+                success_count = 0
+                error_count = 0
+                error_messages = []
+                
+                for param_path, value in current_values.items():
+                    section, key = param_path.split('.', 1)
+                    ok, msg = update_config_param(section, key, value)
+                    if ok:
+                        success_count += 1
+                    else:
+                        error_count += 1
+                        error_messages.append(f"{param_path}: {msg}")
+                
+                # Формируем итоговое сообщение
+                if error_count == 0:
+                    return gr.update(visible=True, value=f"✅ Успешно отправлено {success_count} измененных параметров")
+                else:
+                    error_summary = f"❌ Ошибки при отправке {error_count} из {len(current_values)} параметров:\n" + "\n".join(error_messages[:3])  # Показываем только первые 3 ошибки
+                    return gr.update(visible=True, value=error_summary)
+                    
+            except Exception as e:
+                return gr.update(visible=True, value=f"❌ Ошибка при отправке: {str(e)}")
         
         def save_rockchip_ip(ip):
             """Сохраняет IP Rockchip через API"""
             ok, msg = update_config_param('rockchip', 'ip', ip)
             return gr.update(visible=True, value=(msg if ok else f"❌ {msg}"))
-        
-
         
         def refresh_config_from_api():
             """Обновляет конфигурацию из API"""
@@ -460,8 +499,6 @@ def build_interface():
             rockchip_ip = config.get('rockchip', {}).get('ip', '')
             
             return [rtsp_stream_url] + [gr.update(visible=True, value="✅ Конфигурация обновлена из API")] + violation_updates + [rockchip_ip]
-        
-
         
         # --- Привязка событий ---
         
@@ -491,12 +528,8 @@ def build_interface():
         # Привязываем кнопку очистки тревог
         clear_alarm_btn.click(clear_alarm_box, outputs=[alarm_box])
         
-        api_send_btn.click(send_all_via_api, [url1, rockchip_ip_box], [status])
+        api_send_btn.click(send_all_via_api, [url1, rockchip_ip_box] + violation_fields, [status])
         save_ip_btn.click(save_rockchip_ip, [rockchip_ip_box], [status])
-        # Собираем все поля блоков тревог для обновления
-        violation_fields = []
-        for violation_type, fields in violation_blocks.items():
-            violation_fields.extend([fields['enable'], fields['duration'], fields['threshold']])
         
         refresh_config_btn.click(refresh_config_from_api, None, [url1] + [status] + violation_fields + [rockchip_ip_box])
     

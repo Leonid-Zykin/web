@@ -1,27 +1,26 @@
-FROM python:3.10-slim
+FROM python:3.11-slim
 
 WORKDIR /app
 
-# Копируем requirements.txt и устанавливаем Python зависимости
-COPY requirements.txt ./
+# Установка системных зависимостей
+RUN apt-get update && apt-get install -y \
+    libgl1-mesa-glx \
+    libglib2.0-0 \
+    libsm6 \
+    libxext6 \
+    libxrender-dev \
+    libgomp1 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Копирование requirements и установка Python зависимостей
+COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Устанавливаем системные зависимости только для используемых библиотек
-RUN apt-get update && \
-    apt-get install -y \
-        libglib2.0-0 \
-        libgl1 \
-        libsm6 \
-        libxext6 \
-        libxrender1 \
-        libgomp1 \
-        sshpass \
-        openssh-client && \
-    rm -rf /var/lib/apt/lists/*
-
-# Копируем код приложения
+# Копирование кода приложения
 COPY . .
 
+# Открытие порта
 EXPOSE 7860
 
+# Запуск приложения
 CMD ["python", "app.py"] 

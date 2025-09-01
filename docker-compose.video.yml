@@ -28,8 +28,10 @@ services:
     entrypoint: ["ffmpeg", "-re", "-stream_loop", "-1", "-i", "/video.mp4", "-c", "copy", "-f", "rtsp", "-rtsp_transport", "tcp", "rtsp://rtsp-server:8554/stream"]
 
   mjpeg-server:
-    build: .
-    command: gunicorn -b 0.0.0.0:5000 mjpeg_server:app
+    build:
+      context: .
+      dockerfile: mjpeg.Dockerfile
+    command: python mjpeg_server.py
     ports:
       - "5000:5000"
     restart: unless-stopped

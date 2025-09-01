@@ -1,18 +1,19 @@
 version: '3.8'
-services:
-  gradio-app:
-    build: .
-    platform: linux/amd64
-    network_mode: "host"
-    volumes:
-      - ./config.yaml:/app/config.yaml
-    restart: unless-stopped
-    depends_on:
-      - mjpeg-server
 
-  
-  mjpeg-server:
+services:
+  web_interface:
     build: .
-    command: gunicorn -b 0.0.0.0:5000 mjpeg_server:app
-    network_mode: "host"
+    container_name: web_interface
+    ports:
+      - "7860:7860"
+    environment:
+      - ALARM_WS_URL=ws://192.168.0.172:8008
+    volumes:
+      - ./web_config.json:/app/web_config.json
     restart: unless-stopped
+    networks:
+      - web_network
+
+networks:
+  web_network:
+    driver: bridge
