@@ -314,7 +314,7 @@ def build_interface():
             with gr.Column():
                 def update_alarm_box():
                     return get_raw_udp_text()
-                alarm_box = gr.Textbox(label="RAW UDP тревоги (json)", value=update_alarm_box, lines=30, interactive=False, elem_id="alarm_box", every=2)
+                alarm_box = gr.Textbox(label="RAW UDP тревоги (json)", value=update_alarm_box(), lines=30, interactive=False, elem_id="alarm_box", every=2)
                 
                 def clear_alarm_box():
                     """Очищает окно RAW UDP тревог"""
@@ -407,7 +407,7 @@ def build_interface():
                 # Получаем текущий конфиг из API
                 current_config = load_config_from_api()
                 if not current_config:
-                    return gr.update(visible=True, value="❌ Не удалось загрузить текущий конфиг из API")
+                    return "❌ Не удалось загрузить текущий конфиг из API"
                 
                 # Собираем текущие значения из интерфейса
                 current_values = {}
@@ -446,7 +446,7 @@ def build_interface():
                 
                 # Если нет изменений
                 if not current_values:
-                    return gr.update(visible=True, value="✅ Нет изменений для отправки")
+                    return "✅ Нет изменений для отправки"
                 
                 # Отправляем только измененные параметры
                 success_count = 0
@@ -464,24 +464,24 @@ def build_interface():
                 
                 # Формируем итоговое сообщение
                 if error_count == 0:
-                    return gr.update(visible=True, value=f"✅ Успешно отправлено {success_count} измененных параметров")
+                    return f"✅ Успешно отправлено {success_count} измененных параметров"
                 else:
                     error_summary = f"❌ Ошибки при отправке {error_count} из {len(current_values)} параметров:\n" + "\n".join(error_messages[:3])  # Показываем только первые 3 ошибки
-                    return gr.update(visible=True, value=error_summary)
+                    return error_summary
                     
             except Exception as e:
-                return gr.update(visible=True, value=f"❌ Ошибка при отправке: {str(e)}")
+                return f"❌ Ошибка при отправке: {str(e)}"
         
         def save_rockchip_ip(ip):
             """Сохраняет IP Rockchip через API"""
             ok, msg = update_config_param('rockchip', 'ip', ip)
-            return gr.update(visible=True, value=(msg if ok else f"❌ {msg}"))
+            return (msg if ok else f"❌ {msg}")
         
         def refresh_config_from_api():
             """Обновляет конфигурацию из API"""
             config = load_config_from_api()
             if not config:
-                return gr.update(visible=True, value="❌ Не удалось загрузить конфигурацию из API")
+                return "❌ Не удалось загрузить конфигурацию из API"
             
             rtsp_stream_url, rtsp_annotated_url = get_default_urls(config)
             
@@ -498,7 +498,7 @@ def build_interface():
             # Обновляем IP Rockchip в поле ввода
             rockchip_ip = config.get('rockchip', {}).get('ip', '')
             
-            return [rtsp_stream_url] + [gr.update(visible=True, value="✅ Конфигурация обновлена из API")] + violation_updates + [rockchip_ip]
+            return [rtsp_stream_url, "✅ Конфигурация обновлена из API"] + violation_updates + [rockchip_ip]
         
         # --- Привязка событий ---
         
