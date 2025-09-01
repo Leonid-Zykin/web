@@ -2,5 +2,7 @@ gradio>=4.44.1
 pyyaml
 opencv-python
 numpy
-requests 
-Flask 
+requests
+gunicorn
+flask
+websocket-client 

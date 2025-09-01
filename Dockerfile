@@ -1,10 +1,27 @@
 FROM python:3.10-slim
-SHELL ["/bin/bash", "-c"]
+
 WORKDIR /app
+
+# Копируем requirements.txt и устанавливаем Python зависимости
 COPY requirements.txt ./
-RUN pip install --no-cache-dir -r requirements.txt && \
-    pip install flask opencv-python-headless gunicorn websocket-client
-RUN apt-get update && apt-get install -y libgl1-mesa-glx libglib2.0-0 sshpass openssh-client && rm -rf /var/lib/apt/lists/*
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Устанавливаем системные зависимости только для используемых библиотек
+RUN apt-get update && \
+    apt-get install -y \
+        libglib2.0-0 \
+        libgl1 \
+        libsm6 \
+        libxext6 \
+        libxrender1 \
+        libgomp1 \
+        sshpass \
+        openssh-client && \
+    rm -rf /var/lib/apt/lists/*
+
+# Копируем код приложения
 COPY . .
+
 EXPOSE 7860
+
 CMD ["python", "app.py"] 

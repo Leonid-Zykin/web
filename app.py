@@ -15,13 +15,50 @@ import websocket  # pip install websocket-client
 import subprocess
 
 CONFIG_PATH = os.path.join(os.path.dirname(__file__), 'config.yaml')
+WEB_CONFIG_PATH = os.path.join(os.path.dirname(__file__), 'web_config.json')
 RESULTS_DIR = os.path.join(os.path.dirname(__file__), 'results')
 os.makedirs(RESULTS_DIR, exist_ok=True)
 
 ALARM_MAX = 200
 
 # Явные адреса для видеопотоков и сигналов
-DEFAULT_URL1 = "rtsp://192.168.0.174:8554/stream"
+DEFAULT_URL1 = "rtsp://192.168.0.172:8554/stream"
+
+def load_web_config():
+    """Загружает конфигурацию веб-приложения"""
+    default_config = {
+        "api_host": "192.168.0.172",
+        "api_port": 8000,
+        "last_updated": ""
+    }
+    
+    try:
+        if os.path.exists(WEB_CONFIG_PATH):
+            with open(WEB_CONFIG_PATH, 'r', encoding='utf-8') as f:
+                config = json.load(f)
+                # Обновляем с дефолтными значениями, если чего-то не хватает
+                for key, value in default_config.items():
+                    if key not in config:
+                        config[key] = value
+                return config
+        else:
+            # Создаем файл с дефолтными значениями
+            save_web_config(default_config)
+            return default_config
+    except Exception as e:
+        print(f"[ERROR] Failed to load web config: {e}")
+        return default_config
+
+def save_web_config(config):
+    """Сохраняет конфигурацию веб-приложения"""
+    try:
+        config["last_updated"] = datetime.now().isoformat()
+        with open(WEB_CONFIG_PATH, 'w', encoding='utf-8') as f:
+            json.dump(config, f, indent=4, ensure_ascii=False)
+        return True
+    except Exception as e:
+        print(f"[ERROR] Failed to save web config: {e}")
+        return False
 
 # Глобальная очередь тревог
 # Глобальный лог сырых UDP сообщений
@@ -31,61 +68,12 @@ raw_udp_log = deque(maxlen=ALARM_MAX)
 WS_URL = os.environ.get("ALARM_WS_URL", "ws://localhost:8008") 
 
 # API конфигурация
-API_BASE_URL = "http://192.168.0.173:8000"  # Базовый URL для API
+web_config = load_web_config()
+API_BASE_URL = f"http://{web_config['api_host']}:{web_config['api_port']}"  # Базовый URL для API
 
-# Словарь переводов параметров на русский язык
-PARAM_TRANSLATIONS = {
-    # Системные параметры
-    'system.model': 'Модель YOLO',
-    'system.rtsp_stream_url': 'URL исходного видеопотока',
-    'system.shape_predictor': 'Файл shape_predictor',
-    'system.alarm_host': 'Хост для тревог',
-    'system.alarm_port': 'Порт для тревог',
-    'system.target_host': 'Дополнительный хост',
-    'system.target_port': 'Дополнительный порт',
-    'system.output_stream_url': 'URL обработанного потока',
-    
-    # Параметры нарушений
-    'cigarette.duration': 'Длительность курения (сек)',
-    'cigarette.threshold': 'Порог курения',
-    'closed_eyes.duration': 'Длительность закрытых глаз (сек)',
-    'closed_eyes.threshold': 'Порог закрытых глаз',
-    'closed_eyes_duration.tracking_window': 'Окно отслеживания (сек)',
-    'closed_eyes_duration.threshold': 'Порог времени закрытых глаз (сек)',
-    'head_pose.duration': 'Длительность поворота головы (сек)',
-    'head_pose.pitch': 'Угол наклона головы',
-    'head_pose.yaw': 'Угол поворота головы',
-    'no_belt.duration': 'Длительность отсутствия ремня (сек)',
-    'no_belt.threshold': 'Порог отсутствия ремня',
-    'no_driver.duration': 'Длительность отсутствия водителя (сек)',
-    'no_driver.threshold': 'Порог отсутствия водителя',
-    'no_face.duration': 'Длительность отсутствия лица (сек)',
-    'no_face.threshold': 'Порог отсутствия лица',
-    'phone.duration': 'Длительность использования телефона (сек)',
-    'phone.threshold': 'Порог использования телефона',
-    'yawn.duration': 'Длительность зевоты (сек)',
-    'yawn.threshold': 'Порог зевоты',
-    
-    # Параметры Rockchip
-    'rockchip.ip': 'IP адрес Rockchip',
-    'rockchip.user': 'Пользователь Rockchip',
-    'rockchip.password': 'Пароль Rockchip',
-    'rockchip.config_path': 'Путь к конфигу на Rockchip',
-    'rockchip.api_port': 'Порт API сервиса'
-}
 
-# Словарь переводов для чекбоксов enable
-ENABLE_TRANSLATIONS = {
-    'cigarette': 'Курение',
-    'closed_eyes': 'Закрытые глаза',
-    'closed_eyes_duration': 'Длительность закрытых глаз',
-    'head_pose': 'Поворот головы',
-    'no_belt': 'Отсутствие ремня',
-    'no_driver': 'Отсутствие водителя',
-    'no_face': 'Отсутствие лица',
-    'phone': 'Использование телефона',
-    'yawn': 'Зевота'
-}
+
+
 
 def load_config_from_api():
     """Загружает конфигурацию через API"""
@@ -167,62 +155,7 @@ def send_config_via_api():
     except Exception as e:
         return False, f'Ошибка отправки через API: {str(e)}'
 
-def get_log_files_from_rockchip():
-    """Получает список файлов логов с Rockchip"""
-    config = load_config_from_api()
-    rockchip = config.get('rockchip', {})
-    ip = rockchip.get('ip')
-    user = rockchip.get('user')
-    password = rockchip.get('password')
-    
-    if not all([ip, user, password]):
-        return []
-    
-    # Команда для получения списка файлов логов
-    ssh_cmd = [
-        'sshpass', '-p', password,
-        'ssh', '-o', 'StrictHostKeyChecking=no',
-        f'{user}@{ip}',
-        'ls -1 /home/orangepi/opi5test/logs/alarms_*.log 2>/dev/null || echo ""'
-    ]
-    
-    try:
-        result = subprocess.run(ssh_cmd, check=True, capture_output=True, text=True)
-        files = result.stdout.strip().split('\n')
-        # Извлекаем только имена файлов
-        log_files = [os.path.basename(f) for f in files if f.strip()]
-        return sorted(log_files, reverse=True)  # Новые файлы первыми
-    except subprocess.CalledProcessError as e:
-        print(f"[ERROR] Failed to get log files: {e.stderr}")
-        return []
 
-        def get_log_content_from_rockchip(filename):
-            """Получает содержимое файла лога с Rockchip"""
-            config = load_config_from_api()
-            rockchip = config.get('rockchip', {})
-            ip = rockchip.get('ip')
-            user = rockchip.get('user')
-            password = rockchip.get('password')
-            
-            if not all([ip, user, password]):
-                return "Ошибка: не заданы параметры Rockchip"
-    
-    if not filename:
-        return "Выберите файл лога"
-    
-    # Команда для получения содержимого файла
-    ssh_cmd = [
-        'sshpass', '-p', password,
-        'ssh', '-o', 'StrictHostKeyChecking=no',
-        f'{user}@{ip}',
-        f'cat /home/orangepi/opi5test/logs/{filename}'
-    ]
-    
-    try:
-        result = subprocess.run(ssh_cmd, check=True, capture_output=True, text=True)
-        return result.stdout
-    except subprocess.CalledProcessError as e:
-        return f"Ошибка чтения файла: {e.stderr}"
 
 def stream_video(rtsp_url):
     if not rtsp_url:
@@ -249,27 +182,7 @@ def stream_video(rtsp_url):
             time.sleep(1/25)
         cap.release()
 
-def flatten_config(config, prefix="", out=None):
-    if out is None:
-        out = []
-    for k, v in config.items():
-        if isinstance(v, dict):
-            flatten_config(v, prefix + k + ".", out)
-        else:
-            out.append((prefix + k, v))
-    return out
 
-def unflatten_config(flat_items):
-    config = {}
-    for key, value in flat_items.items():
-        parts = key.split('.')
-        d = config
-        for p in parts[:-1]:
-            if p not in d or not isinstance(d[p], dict):
-                d[p] = {}
-            d = d[p]
-        d[parts[-1]] = value
-    return config
 
 def get_default_urls(config):
     """Получает URL из конфигурации или возвращает значения по умолчанию"""
@@ -288,7 +201,7 @@ def build_interface():
     # Загружаем конфигурацию через API
     config = load_config_from_api()
     
-    # Если API недоступен, показываем сообщение об ошибке
+    # Если API недоступен, показываем сообщение об ошибке с формой для изменения адреса
     if not config:
         with gr.Blocks(title="Ошибка подключения к API") as demo:
             gr.Markdown("# ❌ Ошибка подключения к API")
@@ -297,9 +210,109 @@ def build_interface():
             gr.Markdown("2. Правильный ли IP адрес в переменной API_BASE_URL")
             gr.Markdown("3. Доступность порта 8000")
             gr.Markdown(f"**Текущий URL API:** {API_BASE_URL}")
+            if web_config.get("last_updated"):
+                last_updated = datetime.fromisoformat(web_config["last_updated"]).strftime("%d.%m.%Y %H:%M:%S")
+                gr.Markdown(f"**Последнее обновление:** {last_updated}")
+            
+            # Форма для изменения адреса API
+            gr.Markdown("## 🔧 Изменить адрес API")
+            with gr.Row():
+                api_host_input = gr.Textbox(
+                    label="IP адрес API", 
+                    value=web_config.get("api_host", "192.168.0.172"), 
+                    placeholder="192.168.0.172",
+                    interactive=True
+                )
+                api_port_input = gr.Textbox(
+                    label="Порт API", 
+                    value=str(web_config.get("api_port", 8000)), 
+                    placeholder="8000",
+                    interactive=True
+                )
+            with gr.Row():
+                test_connection_btn = gr.Button("🔍 Проверить подключение", variant="secondary")
+                apply_api_url_btn = gr.Button("✅ Применить новый адрес", variant="primary")
+                reload_page_btn = gr.Button("🔄 Перезагрузить страницу", variant="secondary")
+                reset_config_btn = gr.Button("🔄 Сбросить к умолчанию", variant="secondary")
+            
+            status_msg = gr.Markdown("")
+            
+
+            
+            def test_api_connection(host, port):
+                """Проверяет подключение к API"""
+                try:
+                    test_url = f"http://{host}:{port}/config"
+                    response = requests.get(test_url, timeout=5)
+                    if response.status_code == 200:
+                        return "✅ Подключение успешно! API доступен."
+                    else:
+                        return f"❌ API отвечает с ошибкой: {response.status_code}"
+                except requests.exceptions.ConnectionError:
+                    return f"❌ Не удалось подключиться к {host}:{port}"
+                except requests.exceptions.Timeout:
+                    return f"❌ Таймаут подключения к {host}:{port}"
+                except Exception as e:
+                    return f"❌ Ошибка: {str(e)}"
+            
+            def apply_new_api_url(host, port):
+                """Применяет новый адрес API и сохраняет в конфиг"""
+                global API_BASE_URL, web_config
+                
+                # Обновляем конфигурацию
+                web_config["api_host"] = host
+                web_config["api_port"] = int(port)
+                
+                # Сохраняем в файл
+                if save_web_config(web_config):
+                    API_BASE_URL = f"http://{host}:{port}"
+                    return f"✅ Новый адрес API сохранен: {API_BASE_URL}. Перезагрузите страницу для применения изменений."
+                else:
+                    return "❌ Ошибка сохранения конфигурации"
+            
+            test_connection_btn.click(
+                test_api_connection, 
+                inputs=[api_host_input, api_port_input], 
+                outputs=[status_msg]
+            )
+            apply_api_url_btn.click(
+                apply_new_api_url, 
+                inputs=[api_host_input, api_port_input], 
+                outputs=[status_msg]
+            )
+            
+            def reload_page():
+                """Перезагружает страницу"""
+                return "🔄 Перезагрузка страницы..."
+            
+            def reset_config():
+                """Сбрасывает конфигурацию к значениям по умолчанию"""
+                global web_config
+                default_config = {
+                    "api_host": "192.168.0.172",
+                    "api_port": 8000,
+                    "last_updated": ""
+                }
+                if save_web_config(default_config):
+                    web_config = default_config
+                    return "✅ Конфигурация сброшена к значениям по умолчанию. Перезагрузите страницу."
+                else:
+                    return "❌ Ошибка сброса конфигурации"
+            
+            reload_page_btn.click(
+                reload_page,
+                outputs=[status_msg]
+            )
+            reset_config_btn.click(
+                reset_config,
+                outputs=[status_msg]
+            )
+            
+
+            
             return demo
     
-    flat_fields = flatten_config(config)
+
     rockchip = config.get('rockchip', {})
     
     # Получаем URL из конфигурации
@@ -314,64 +327,86 @@ def build_interface():
             with gr.Column():
                 def update_alarm_box():
                     return get_raw_udp_text()
-                alarm_box = gr.Textbox(label="RAW UDP тревоги (json)", value=update_alarm_box, lines=38, interactive=False, elem_id="alarm_box", every=2)
+                alarm_box = gr.Textbox(label="RAW UDP тревоги (json)", value=update_alarm_box, lines=30, interactive=False, elem_id="alarm_box", every=2)
+                
+                def clear_alarm_box():
+                    """Очищает окно RAW UDP тревог"""
+                    global raw_udp_log
+                    raw_udp_log.clear()
+                    return "Окно очищено"
+                
+                clear_alarm_btn = gr.Button("🗑️ Очистить окно тревог", variant="secondary")
         
-        # --- Логи тревог ---
-        gr.Markdown("## Логи тревог")
-        with gr.Row():
-            with gr.Column():
-                log_file_dropdown = gr.Dropdown(label="Выберите файл лога", choices=[], interactive=True)
-                refresh_logs_btn = gr.Button("🔄 Обновить список логов")
-            with gr.Column():
-                log_content_box = gr.Textbox(label="Содержимое лога", lines=20, interactive=False)
-        with gr.Row():
-            load_log_btn = gr.Button("📖 Загрузить лог")
+
         
-        def refresh_log_files():
-            log_files = get_log_files_from_rockchip()
-            return gr.update(choices=log_files)
-        
-        def load_log_content(filename):
-            if not filename:
-                return "Выберите файл лога"
-            return get_log_content_from_rockchip(filename)
-        
-        refresh_logs_btn.click(refresh_log_files, outputs=[log_file_dropdown])
-        load_log_btn.click(load_log_content, inputs=[log_file_dropdown], outputs=[log_content_box])
-        
-        # --- Чекбоксы для включения/отключения тревог ---
-        gr.Markdown("## Управление тревогами")
-        enable_checkboxes = {}
-        with gr.Row():
-            for violation_type, label in ENABLE_TRANSLATIONS.items():
-                enable_checkboxes[violation_type] = gr.Checkbox(
-                    label=label, 
-                    value=config.get(violation_type, {}).get('enable', True),
-                    interactive=True
-                )
+
         
         # --- Параметры config.yaml ---
         gr.Markdown("## Параметры конфигурации")
         
-        # Кнопка обновления конфигурации из API
+        # Кнопки обновления и отправки конфигурации
         with gr.Row():
             refresh_config_btn = gr.Button("🔄 Обновить из API", variant="secondary")
+            api_send_btn = gr.Button("📤 Отправить через API", variant="secondary")
         
-        param_inputs = {}
-        param_list = list(flat_fields)
-        n = len(param_list)
-        chunk_size = (n + 3) // 4
-        chunks = [param_list[i:i + chunk_size] for i in range(0, n, chunk_size)]
-        with gr.Row():
-            for chunk in chunks:
-                with gr.Column():
-                    for key, value in chunk:
-                        param_inputs[key] = gr.Textbox(label=PARAM_TRANSLATIONS.get(key, key), value=str(value), interactive=True)
+        # --- Блоки тревог ---
+        gr.Markdown("### Настройки тревог")
         
-        with gr.Row():
-            save_btn = gr.Button("Сохранить")
-            api_send_btn = gr.Button("Отправить через API", variant="secondary")
-            reset_btn = gr.Button("Сбросить")
+        # Словарь переводов для тревог
+        VIOLATION_TRANSLATIONS = {
+            'cigarette': 'Курение',
+            'closed_eyes': 'Закрытые глаза',
+            'closed_eyes_duration': 'Длительность закрытых глаз',
+            'head_pose': 'Поворот головы',
+            'no_belt': 'Отсутствие ремня',
+            'no_driver': 'Отсутствие водителя',
+            'no_face': 'Отсутствие лица',
+            'phone': 'Использование телефона',
+            'yawn': 'Зевота'
+        }
+        
+        violation_blocks = {}
+        
+        # Создаем блоки для каждой тревоги, группируя по 3 в строку
+        violation_items = list(VIOLATION_TRANSLATIONS.items())
+        for i in range(0, len(violation_items), 3):
+            with gr.Row():
+                for j in range(3):
+                    if i + j < len(violation_items):
+                        violation_type, label = violation_items[i + j]
+                        violation_config = config.get(violation_type, {})
+                        
+                        with gr.Column():
+                            with gr.Group():
+                                with gr.Row():
+                                    gr.Markdown(f"**{label}**")
+                                    enable_checkbox = gr.Checkbox(
+                                        label="Включить", 
+                                        value=violation_config.get('enable', True),
+                                        interactive=True
+                                    )
+                                
+                                with gr.Column():
+                                    duration_input = gr.Textbox(
+                                        label="Длительность (сек)", 
+                                        value=str(violation_config.get('duration', 5)),
+                                        interactive=True
+                                    )
+                                    threshold_input = gr.Textbox(
+                                        label="Уверенность", 
+                                        value=str(violation_config.get('threshold', 0.5)),
+                                        interactive=True
+                                    )
+                                
+                                violation_blocks[violation_type] = {
+                                    'enable': enable_checkbox,
+                                    'duration': duration_input,
+                                    'threshold': threshold_input
+                                }
+        
+
+        
+
         
         # --- Rockchip IP ---
         with gr.Row():
@@ -381,38 +416,15 @@ def build_interface():
         status = gr.Markdown(visible=False)
         
         # --- Обработчики событий ---
-        def on_enable_checkbox_change(violation_type, checked):
-            """Обработчик изменения чекбокса enable"""
-            ok, msg = update_config_param(violation_type, 'enable', checked)
-            return gr.update(visible=True, value=(msg if ok else f"❌ {msg}"))
+
         
-        def save_all(url1, *params):
-            """Сохраняет все параметры через API"""
-            param_dict = {k: try_cast(params[i], flat_fields[i][1]) for i, (k, _) in enumerate(flat_fields)}
+        def send_all_via_api(url1, rockchip_ip):
+            """Отправляет конфиг через API"""
+            # Обновляем IP Rockchip если он изменился
+            if rockchip_ip:
+                update_config_param('rockchip', 'ip', rockchip_ip)
             
-            # Обновляем каждый параметр через API
-            success_count = 0
-            total_count = len(param_dict)
-            
-            for key, value in param_dict.items():
-                parts = key.split('.')
-                if len(parts) >= 2:
-                    section, param_key = parts[0], '.'.join(parts[1:])
-                    ok, _ = update_config_param(section, param_key, value)
-                    if ok:
-                        success_count += 1
-            
-            if success_count == total_count:
-                return gr.update(visible=True, value=f"✅ Все параметры сохранены ({success_count}/{total_count})")
-            else:
-                return gr.update(visible=True, value=f"⚠️ Сохранено {success_count}/{total_count} параметров")
-        
-        def send_all_via_api(url1, *params):
-            """Сохраняет конфиг локально и отправляет через API"""
-            # Сначала сохраняем все параметры
-            save_result = save_all(url1, *params)
-            
-            # Затем отправляем через API
+            # Затем отправляем через API с новым IP
             ok, msg = send_config_via_api()
             if ok:
                 return gr.update(visible=True, value=f"✅ {msg}")
@@ -424,19 +436,7 @@ def build_interface():
             ok, msg = update_config_param('rockchip', 'ip', ip)
             return gr.update(visible=True, value=(msg if ok else f"❌ {msg}"))
         
-        def reset_all():
-            """Сбрасывает все параметры к значениям из API"""
-            config = load_config_from_api()
-            flat_fields_new = flatten_config(config)
-            values = [str(v) for _, v in flat_fields_new]
-            rtsp_stream_url, rtsp_annotated_url = get_default_urls(config)
-            
-            # Обновляем чекбоксы
-            checkbox_updates = {}
-            for violation_type in ENABLE_TRANSLATIONS:
-                checkbox_updates[violation_type] = config.get(violation_type, {}).get('enable', True)
-            
-            return [rtsp_stream_url] + values + [gr.update(visible=True, value="🔄 Сброшено!")] + list(checkbox_updates.values())
+
         
         def refresh_config_from_api():
             """Обновляет конфигурацию из API"""
@@ -444,44 +444,61 @@ def build_interface():
             if not config:
                 return gr.update(visible=True, value="❌ Не удалось загрузить конфигурацию из API")
             
-            flat_fields_new = flatten_config(config)
-            values = [str(v) for _, v in flat_fields_new]
             rtsp_stream_url, rtsp_annotated_url = get_default_urls(config)
             
-            # Обновляем чекбоксы
-            checkbox_updates = {}
-            for violation_type in ENABLE_TRANSLATIONS:
-                checkbox_updates[violation_type] = config.get(violation_type, {}).get('enable', True)
+            # Обновляем блоки тревог
+            violation_updates = []
+            for violation_type in VIOLATION_TRANSLATIONS:
+                violation_config = config.get(violation_type, {})
+                violation_updates.extend([
+                    violation_config.get('enable', True),  # enable
+                    str(violation_config.get('duration', 5)),  # duration
+                    str(violation_config.get('threshold', 0.5))  # threshold
+                ])
             
-            return [rtsp_stream_url] + values + [gr.update(visible=True, value="✅ Конфигурация обновлена из API")] + list(checkbox_updates.values())
+            # Обновляем IP Rockchip в поле ввода
+            rockchip_ip = config.get('rockchip', {}).get('ip', '')
+            
+            return [rtsp_stream_url] + [gr.update(visible=True, value="✅ Конфигурация обновлена из API")] + violation_updates + [rockchip_ip]
         
-        def try_cast(val, orig):
-            if isinstance(orig, float):
-                try:
-                    return float(val)
-                except:
-                    return orig
-            if isinstance(orig, int):
-                try:
-                    return int(val)
-                except:
-                    return orig
-            return val
+
         
         # --- Привязка событий ---
-        # Привязываем чекбоксы enable
-        for violation_type, checkbox in enable_checkboxes.items():
-            checkbox.change(
-                fn=lambda checked, vt=violation_type: on_enable_checkbox_change(vt, checked),
-                inputs=[checkbox],
+        
+        # Привязываем блоки тревог
+        for violation_type, fields in violation_blocks.items():
+            # Обработчик для чекбокса enable
+            fields['enable'].change(
+                fn=lambda checked, vt=violation_type: update_config_param(vt, 'enable', checked),
+                inputs=[fields['enable']],
+                outputs=[status]
+            )
+            
+            # Обработчик для поля длительности
+            fields['duration'].change(
+                fn=lambda value, vt=violation_type: update_config_param(vt, 'duration', float(value) if value else 5.0),
+                inputs=[fields['duration']],
+                outputs=[status]
+            )
+            
+            # Обработчик для поля уверенности
+            fields['threshold'].change(
+                fn=lambda value, vt=violation_type: update_config_param(vt, 'threshold', float(value) if value else 0.5),
+                inputs=[fields['threshold']],
                 outputs=[status]
             )
         
-        save_btn.click(save_all, [url1] + list(param_inputs.values()), [status])
-        reset_btn.click(reset_all, None, [url1] + list(param_inputs.values()) + [status] + list(enable_checkboxes.values()))
-        api_send_btn.click(send_all_via_api, [url1] + list(param_inputs.values()), [status])
+        # Привязываем кнопку очистки тревог
+        clear_alarm_btn.click(clear_alarm_box, outputs=[alarm_box])
+        
+        api_send_btn.click(send_all_via_api, [url1, rockchip_ip_box], [status])
         save_ip_btn.click(save_rockchip_ip, [rockchip_ip_box], [status])
-        refresh_config_btn.click(refresh_config_from_api, None, [url1] + list(param_inputs.values()) + [status] + list(enable_checkboxes.values()))
+        # Собираем все поля блоков тревог для обновления
+        violation_fields = []
+        for violation_type, fields in violation_blocks.items():
+            violation_fields.extend([fields['enable'], fields['duration'], fields['threshold']])
+        
+        refresh_config_btn.click(refresh_config_from_api, None, [url1] + [status] + violation_fields + [rockchip_ip_box])
     
     return demo
 
@@ -489,17 +506,22 @@ def build_interface():
 def udp_alarm_listener(host="0.0.0.0", port=8008):
     import socket
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    sock.bind((host, port))
-    print(f"[UDP] Listening for DSM alarms on {host}:{port}")
-    while True:
-        try:
-            data, addr = sock.recvfrom(4096)
-            msg = data.decode("utf-8")
-            raw_udp_log.append(msg)
-            print(f"[UDP] RAW from {addr}: {msg}")
-        except Exception as e:
-            print(f"[UDP] Error: {e}")
-            time.sleep(1)
+    try:
+        sock.bind((host, port))
+        print(f"[UDP] Listening for DSM alarms on {host}:{port}")
+        while True:
+            try:
+                data, addr = sock.recvfrom(4096)
+                msg = data.decode("utf-8")
+                raw_udp_log.append(msg)
+                print(f"[UDP] RAW from {addr}: {msg}")
+            except Exception as e:
+                print(f"[UDP] Error: {e}")
+                time.sleep(1)
+    except OSError as e:
+        print(f"[UDP] Port {port} already in use, skipping UDP listener: {e}")
+    except Exception as e:
+        print(f"[UDP] Error: {e}")
 
 # --- Start UDP listener in background thread ---
 def start_udp_listener():

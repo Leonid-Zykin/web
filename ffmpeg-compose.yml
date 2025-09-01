@@ -1,0 +1,6 @@
+services:
+  ffmpeg:
+    image: lscr.io/linuxserver/ffmpeg:latest
+    volumes:
+      - ./video.mp4:/video.mp4:ro
+    entrypoint: ["ffmpeg", "-re", "-stream_loop", "-1", "-i", "/video.mp4", "-c", "copy", "-f", "rtsp", "-rtsp_transport", "tcp", "rtsp://192.168.0.172:8554/stream"]
