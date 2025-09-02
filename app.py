@@ -322,8 +322,7 @@ def build_interface():
 
     rockchip = config.get('rockchip', {})
     
-    # Получаем URL из конфигурации
-    rtsp_stream_url, rtsp_annotated_url = get_default_urls(config)
+
     
     with gr.Blocks(title="Видеомониторинг и настройки") as demo:
         gr.Markdown("# Видеомониторинг и настройки")
@@ -337,8 +336,7 @@ def build_interface():
                 )
                 save_local_rtsp_btn = gr.Button("💾 Сохранить локальный RTSP URL", variant="secondary")
                 
-                # API конфигурация RTSP URL
-                url1 = gr.Textbox(label="RTSP URL из API (Оригинал)", value=rtsp_stream_url, interactive=True)
+
                 gr.HTML('<img src="http://localhost:5000/video" style="width:100%; max-width: 800px; border: 2px solid #444; border-radius: 8px;">')
             with gr.Column():
                 def update_alarm_box():
@@ -433,7 +431,7 @@ def build_interface():
         
         # --- Обработчики событий ---
         
-        def send_all_via_api(url1, rockchip_ip, *violation_values):
+        def send_all_via_api(rockchip_ip, *violation_values):
             """Отправляет только измененные параметры конфигурации через API"""
             try:
                 # Получаем текущий конфиг из API
@@ -524,8 +522,6 @@ def build_interface():
             if not config:
                 return "❌ Не удалось загрузить конфигурацию из API"
             
-            rtsp_stream_url, rtsp_annotated_url = get_default_urls(config)
-            
             # Обновляем блоки тревог
             violation_updates = []
             for violation_type in VIOLATION_TRANSLATIONS:
@@ -542,7 +538,7 @@ def build_interface():
             # Обновляем локальный RTSP URL
             local_rtsp_url_value = web_config.get('rtsp_stream_url', DEFAULT_URL1)
             
-            return [rtsp_stream_url, "✅ Конфигурация обновлена из API"] + violation_updates + [rockchip_ip, local_rtsp_url_value]
+            return ["✅ Конфигурация обновлена из API"] + violation_updates + [rockchip_ip, local_rtsp_url_value]
         
         # --- Привязка событий ---
         
@@ -573,11 +569,11 @@ def build_interface():
         clear_alarm_btn.click(clear_alarm_box, outputs=[alarm_box])
         refresh_alarm_btn.click(lambda: get_raw_udp_text(), outputs=[alarm_box])
         
-        api_send_btn.click(send_all_via_api, [url1, rockchip_ip_box] + violation_fields, [status])
+        api_send_btn.click(send_all_via_api, [rockchip_ip_box] + violation_fields, [status])
         save_ip_btn.click(lambda ip: save_rockchip_ip(ip), [rockchip_ip_box], [status])
         save_local_rtsp_btn.click(save_local_rtsp_url, [local_rtsp_url], [status])
         
-        refresh_config_btn.click(refresh_config_from_api, None, [url1] + [status] + violation_fields + [rockchip_ip_box, local_rtsp_url])
+        refresh_config_btn.click(refresh_config_from_api, None, [status] + violation_fields + [rockchip_ip_box, local_rtsp_url])
 
         # Автообновление окна RAW UDP тревог при получении новых сообщений
         alarm_timer = gr.Timer(value=1.0)  # Проверяем каждую секунду
