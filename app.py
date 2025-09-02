@@ -539,7 +539,7 @@ def build_interface():
         refresh_config_btn.click(refresh_config_from_api, None, [url1] + [status] + violation_fields + [rockchip_ip_box])
 
         # Автообновление окна RAW UDP тревог через таймер (Gradio 5)
-        refresh_timer = gr.Timer(2.0)
+        refresh_timer = gr.Timer(0.5)
         refresh_timer.tick(fn=lambda: get_raw_udp_text(), outputs=[alarm_box])
     
     return demo
