@@ -537,6 +537,9 @@ def build_interface():
         save_ip_btn.click(lambda ip: save_rockchip_ip(ip), [rockchip_ip_box], [status])
         
         refresh_config_btn.click(refresh_config_from_api, None, [url1] + [status] + violation_fields + [rockchip_ip_box])
+
+        # Автообновление окна RAW UDP тревог каждые 2 сек
+        demo.load(fn=lambda: get_raw_udp_text(), inputs=None, outputs=[alarm_box], every=2)
     
     return demo
 
