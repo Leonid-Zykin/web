@@ -151,6 +151,11 @@ def send_config_via_api():
     except Exception as e:
         return False, f'Ошибка отправки через API: {str(e)}'
 
+def update_config_param_text(section, key, value):
+    """Обертка: возвращает человекочитаемую строку вместо (ok, msg)"""
+    ok, msg = update_config_param(section, key, value)
+    return (msg if ok else f"❌ {msg}")
+
 def stream_video(rtsp_url):
     if not rtsp_url:
         print("RTSP URL is empty. Returning blank image.")
@@ -506,21 +511,21 @@ def build_interface():
         for violation_type, fields in violation_blocks.items():
             # Обработчик для чекбокса enable
             fields['enable'].change(
-                fn=lambda checked, vt=violation_type: update_config_param(vt, 'enable', checked),
+                fn=lambda checked, vt=violation_type: update_config_param_text(vt, 'enable', checked),
                 inputs=[fields['enable']],
                 outputs=[status]
             )
             
             # Обработчик для поля длительности
             fields['duration'].change(
-                fn=lambda value, vt=violation_type: update_config_param(vt, 'duration', float(value) if value else 5.0),
+                fn=lambda value, vt=violation_type: update_config_param_text(vt, 'duration', float(value) if value else 5.0),
                 inputs=[fields['duration']],
                 outputs=[status]
             )
             
             # Обработчик для поля уверенности
             fields['threshold'].change(
-                fn=lambda value, vt=violation_type: update_config_param(vt, 'threshold', float(value) if value else 0.5),
+                fn=lambda value, vt=violation_type: update_config_param_text(vt, 'threshold', float(value) if value else 0.5),
                 inputs=[fields['threshold']],
                 outputs=[status]
             )
@@ -529,7 +534,7 @@ def build_interface():
         clear_alarm_btn.click(clear_alarm_box, outputs=[alarm_box])
         
         api_send_btn.click(send_all_via_api, [url1, rockchip_ip_box] + violation_fields, [status])
-        save_ip_btn.click(save_rockchip_ip, [rockchip_ip_box], [status])
+        save_ip_btn.click(lambda ip: save_rockchip_ip(ip), [rockchip_ip_box], [status])
         
         refresh_config_btn.click(refresh_config_from_api, None, [url1] + [status] + violation_fields + [rockchip_ip_box])
     
