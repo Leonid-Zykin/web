@@ -1,10 +1,32 @@
 from flask import Flask, Response, abort
 import cv2
 import threading
+import os
 
 app = Flask(__name__)
 
-RTSP_URL = "rtsp://192.168.0.172:8554/stream"
+# Загружаем RTSP URL из локальной конфигурации
+def get_rtsp_url():
+    import yaml
+    
+    # Читаем только локальную конфигурацию веб-приложения
+    try:
+        web_config_path = os.path.join(os.path.dirname(__file__), 'web_config.yaml')
+        if os.path.exists(web_config_path):
+            with open(web_config_path, 'r', encoding='utf-8') as f:
+                web_config = yaml.safe_load(f)
+                local_rtsp_url = web_config.get('rtsp_stream_url', 'rtsp://192.168.0.172:8554/stream')
+                print(f"[MJPEG] Using local RTSP URL: {local_rtsp_url}")
+                return local_rtsp_url
+    except Exception as e:
+        print(f"[MJPEG] Failed to load local config: {e}")
+    
+    # Fallback к значению по умолчанию
+    default_url = "rtsp://192.168.0.172:8554/stream"
+    print(f"[MJPEG] Using default RTSP URL: {default_url}")
+    return default_url
+
+RTSP_URL = get_rtsp_url()
 
 # Глобальные переменные для обмена кадрами между потоками
 latest_frame = None
@@ -98,6 +120,13 @@ def generate():
 def video_feed():
     return Response(generate(),
                     mimetype='multipart/x-mixed-replace; boundary=frame')
+
+@app.route('/reload_config')
+def reload_config():
+    """Перезагружает RTSP URL из конфигурации"""
+    global RTSP_URL
+    RTSP_URL = get_rtsp_url()
+    return f"RTSP URL updated to: {RTSP_URL}"
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, threaded=True) 

@@ -15,7 +15,7 @@ import websocket  # pip install websocket-client
 import subprocess
 
 CONFIG_PATH = os.path.join(os.path.dirname(__file__), 'config.yaml')
-WEB_CONFIG_PATH = os.path.join(os.path.dirname(__file__), 'web_config.json')
+WEB_CONFIG_PATH = os.path.join(os.path.dirname(__file__), 'web_config.yaml')
 RESULTS_DIR = os.path.join(os.path.dirname(__file__), 'results')
 os.makedirs(RESULTS_DIR, exist_ok=True)
 
@@ -29,13 +29,14 @@ def load_web_config():
     default_config = {
         "api_host": "192.168.0.172",
         "api_port": 8000,
+        "rtsp_stream_url": "rtsp://192.168.0.172:8554/stream",
         "last_updated": ""
     }
     
     try:
         if os.path.exists(WEB_CONFIG_PATH):
             with open(WEB_CONFIG_PATH, 'r', encoding='utf-8') as f:
-                config = json.load(f)
+                config = yaml.safe_load(f)
                 # Обновляем с дефолтными значениями, если чего-то не хватает
                 for key, value in default_config.items():
                     if key not in config:
@@ -54,7 +55,7 @@ def save_web_config(config):
     try:
         config["last_updated"] = datetime.now().isoformat()
         with open(WEB_CONFIG_PATH, 'w', encoding='utf-8') as f:
-            json.dump(config, f, indent=4, ensure_ascii=False)
+            yaml.dump(config, f, default_flow_style=False, allow_unicode=True, indent=2)
         return True
     except Exception as e:
         print(f"[ERROR] Failed to save web config: {e}")
@@ -63,6 +64,8 @@ def save_web_config(config):
 # Глобальная очередь тревог
 # Глобальный лог сырых UDP сообщений
 raw_udp_log = deque(maxlen=ALARM_MAX)
+# Флаг для отслеживания новых тревог
+new_alarm_received = False
 
 # --- WebSocket listener ---
 WS_URL = os.environ.get("ALARM_WS_URL", "ws://localhost:8008") 
@@ -183,9 +186,13 @@ def stream_video(rtsp_url):
 
 def get_default_urls(config):
     """Получает URL из конфигурации или возвращает значения по умолчанию"""
+    # Сначала проверяем локальную конфигурацию веб-приложения
+    local_rtsp_url = web_config.get('rtsp_stream_url', DEFAULT_URL1)
+    
+    # Затем проверяем конфигурацию API
     system_config = config.get('system', {})
-    rtsp_stream_url = system_config.get('rtsp_stream_url', DEFAULT_URL1)
-    rtsp_annotated_url = system_config.get('rtsp_annotated_url', DEFAULT_URL1)
+    rtsp_stream_url = system_config.get('rtsp_stream_url', local_rtsp_url)
+    rtsp_annotated_url = system_config.get('rtsp_annotated_url', rtsp_stream_url)
     return rtsp_stream_url, rtsp_annotated_url
 
 def get_raw_udp_text():
@@ -193,6 +200,14 @@ def get_raw_udp_text():
     if not lines:
         return "Нет UDP сообщений"
     return '\n'.join(lines)
+
+def check_and_update_alarms():
+    """Проверяет наличие новых тревог и возвращает обновленный текст"""
+    global new_alarm_received
+    if new_alarm_received:
+        new_alarm_received = False  # Сбрасываем флаг
+        return get_raw_udp_text()
+    return gr.update()  # Возвращаем gr.update() если нет изменений
 
 def build_interface():
     # Загружаем конфигурацию через API
@@ -314,20 +329,32 @@ def build_interface():
         gr.Markdown("# Видеомониторинг и настройки")
         with gr.Row():
             with gr.Column():
-                url1 = gr.Textbox(label="RTSP URL 1 (Оригинал)", value=rtsp_stream_url, interactive=True)
+                # Локальная конфигурация RTSP URL
+                local_rtsp_url = gr.Textbox(
+                    label="Локальный RTSP URL (для MJPEG сервера)", 
+                    value=web_config.get('rtsp_stream_url', DEFAULT_URL1), 
+                    interactive=True
+                )
+                save_local_rtsp_btn = gr.Button("💾 Сохранить локальный RTSP URL", variant="secondary")
+                
+                # API конфигурация RTSP URL
+                url1 = gr.Textbox(label="RTSP URL из API (Оригинал)", value=rtsp_stream_url, interactive=True)
                 gr.HTML('<img src="http://localhost:5000/video" style="width:100%; max-width: 800px; border: 2px solid #444; border-radius: 8px;">')
             with gr.Column():
                 def update_alarm_box():
                     return get_raw_udp_text()
-                alarm_box = gr.Textbox(label="RAW UDP тревоги (json)", value=update_alarm_box(), lines=30, interactive=False, elem_id="alarm_box", every=2)
+                alarm_box = gr.Textbox(label="RAW UDP тревоги (json)", value=update_alarm_box(), lines=30, interactive=False, elem_id="alarm_box")
                 
                 def clear_alarm_box():
                     """Очищает окно RAW UDP тревог"""
-                    global raw_udp_log
+                    global raw_udp_log, new_alarm_received
                     raw_udp_log.clear()
+                    new_alarm_received = False  # Сбрасываем флаг новых тревог
                     return "Окно очищено"
                 
-                clear_alarm_btn = gr.Button("🗑️ Очистить окно тревог", variant="secondary")
+                with gr.Row():
+                    clear_alarm_btn = gr.Button("🗑️ Очистить окно тревог", variant="secondary")
+                    refresh_alarm_btn = gr.Button("🔄 Обновить тревоги", variant="secondary")
         
         # --- Параметры config.yaml ---
         gr.Markdown("## Параметры конфигурации")
@@ -482,6 +509,15 @@ def build_interface():
             ok, msg = update_config_param('rockchip', 'ip', ip)
             return (msg if ok else f"❌ {msg}")
         
+        def save_local_rtsp_url(rtsp_url):
+            """Сохраняет локальный RTSP URL в конфигурацию веб-приложения"""
+            global web_config
+            web_config['rtsp_stream_url'] = rtsp_url
+            if save_web_config(web_config):
+                return f"✅ Локальный RTSP URL сохранен: {rtsp_url}"
+            else:
+                return "❌ Ошибка сохранения локального RTSP URL"
+        
         def refresh_config_from_api():
             """Обновляет конфигурацию из API"""
             config = load_config_from_api()
@@ -503,7 +539,10 @@ def build_interface():
             # Обновляем IP Rockchip в поле ввода
             rockchip_ip = config.get('rockchip', {}).get('ip', '')
             
-            return [rtsp_stream_url, "✅ Конфигурация обновлена из API"] + violation_updates + [rockchip_ip]
+            # Обновляем локальный RTSP URL
+            local_rtsp_url_value = web_config.get('rtsp_stream_url', DEFAULT_URL1)
+            
+            return [rtsp_stream_url, "✅ Конфигурация обновлена из API"] + violation_updates + [rockchip_ip, local_rtsp_url_value]
         
         # --- Привязка событий ---
         
@@ -530,23 +569,29 @@ def build_interface():
                 outputs=[status]
             )
         
-        # Привязываем кнопку очистки тревог
+        # Привязываем кнопки тревог
         clear_alarm_btn.click(clear_alarm_box, outputs=[alarm_box])
+        refresh_alarm_btn.click(lambda: get_raw_udp_text(), outputs=[alarm_box])
         
         api_send_btn.click(send_all_via_api, [url1, rockchip_ip_box] + violation_fields, [status])
         save_ip_btn.click(lambda ip: save_rockchip_ip(ip), [rockchip_ip_box], [status])
+        save_local_rtsp_btn.click(save_local_rtsp_url, [local_rtsp_url], [status])
         
-        refresh_config_btn.click(refresh_config_from_api, None, [url1] + [status] + violation_fields + [rockchip_ip_box])
+        refresh_config_btn.click(refresh_config_from_api, None, [url1] + [status] + violation_fields + [rockchip_ip_box, local_rtsp_url])
 
-        # Автообновление окна RAW UDP тревог через таймер (Gradio 5)
-        refresh_timer = gr.Timer(0.5)
-        refresh_timer.tick(fn=lambda: get_raw_udp_text(), outputs=[alarm_box])
+        # Автообновление окна RAW UDP тревог при получении новых сообщений
+        alarm_timer = gr.Timer(value=1.0)  # Проверяем каждую секунду
+        alarm_timer.tick(
+            fn=check_and_update_alarms,
+            outputs=[alarm_box]
+        )
     
     return demo
 
 # --- UDP listener for DSM alarms ---
 def udp_alarm_listener(host="0.0.0.0", port=8008):
     import socket
+    global new_alarm_received
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     try:
         sock.bind((host, port))
@@ -556,6 +601,7 @@ def udp_alarm_listener(host="0.0.0.0", port=8008):
                 data, addr = sock.recvfrom(4096)
                 msg = data.decode("utf-8")
                 raw_udp_log.append(msg)
+                new_alarm_received = True  # Устанавливаем флаг при получении новой тревоги
                 print(f"[UDP] RAW from {addr}: {msg}")
             except Exception as e:
                 print(f"[UDP] Error: {e}")
