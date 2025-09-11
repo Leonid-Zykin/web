@@ -408,12 +408,46 @@ def build_interface():
                                         value=str(violation_config.get('threshold', 0.5)),
                                         interactive=True
                                     )
+
+                                    # Дополнительные поля для Поворот головы
+                                    head_center_pitch_input = None
+                                    head_center_yaw_input = None
+                                    head_pitch_input = None
+                                    head_yaw_input = None
+                                    if violation_type == 'head_pose':
+                                        head_center_pitch_input = gr.Textbox(
+                                            label="Центр тангажа (center_pitch)",
+                                            value=str(violation_config.get('center_pitch', 0.0)),
+                                            interactive=True
+                                        )
+                                        head_center_yaw_input = gr.Textbox(
+                                            label="Центр рысканья (center_yaw)",
+                                            value=str(violation_config.get('center_yaw', 0.0)),
+                                            interactive=True
+                                        )
+                                        head_pitch_input = gr.Textbox(
+                                            label="Порог тангажа (pitch)",
+                                            value=str(violation_config.get('pitch', 30.0)),
+                                            interactive=True
+                                        )
+                                        head_yaw_input = gr.Textbox(
+                                            label="Порог рысканья (yaw)",
+                                            value=str(violation_config.get('yaw', 45.0)),
+                                            interactive=True
+                                        )
                                 
                                 violation_blocks[violation_type] = {
                                     'enable': enable_checkbox,
                                     'duration': duration_input,
                                     'threshold': threshold_input
                                 }
+                                if violation_type == 'head_pose':
+                                    violation_blocks[violation_type].update({
+                                        'center_pitch': head_center_pitch_input,
+                                        'center_yaw': head_center_yaw_input,
+                                        'pitch': head_pitch_input,
+                                        'yaw': head_yaw_input
+                                    })
         
         # --- Rockchip IP ---
         with gr.Row():
@@ -422,10 +456,22 @@ def build_interface():
         
         status = gr.Markdown(visible=False)
         
-        # Собираем все поля блоков тревог для обновления
-        violation_fields = []
+        # Собираем поля блоков тревог
+        violation_fields = []  # используется для массовой отправки через API (enable, duration, threshold)
+        refresh_fields = []    # используется для обновления из API (включая дополнительные head_pose поля)
         for violation_type, fields in violation_blocks.items():
-            violation_fields.extend([fields['enable'], fields['duration'], fields['threshold']])
+            # Базовые поля для всех нарушений
+            base_components = [fields['enable'], fields['duration'], fields['threshold']]
+            violation_fields.extend(base_components)
+            refresh_fields.extend(base_components)
+            # Дополнительные поля только для head_pose
+            if violation_type == 'head_pose':
+                refresh_fields.extend([
+                    fields.get('center_pitch'),
+                    fields.get('center_yaw'),
+                    fields.get('pitch'),
+                    fields.get('yaw')
+                ])
         
         # --- Обработчики событий ---
         
@@ -524,11 +570,20 @@ def build_interface():
             violation_updates = []
             for violation_type in VIOLATION_TRANSLATIONS:
                 violation_config = config.get(violation_type, {})
+                # Базовые поля
                 violation_updates.extend([
-                    violation_config.get('enable', True),  # enable
-                    str(violation_config.get('duration', 5)),  # duration
-                    str(violation_config.get('threshold', 0.5))  # threshold
+                    violation_config.get('enable', True),
+                    str(violation_config.get('duration', 5)),
+                    str(violation_config.get('threshold', 0.5))
                 ])
+                # Дополнительные поля для head_pose (в порядке, соответствующем refresh_fields)
+                if violation_type == 'head_pose':
+                    violation_updates.extend([
+                        str(violation_config.get('center_pitch', 0.0)),
+                        str(violation_config.get('center_yaw', 0.0)),
+                        str(violation_config.get('pitch', 30.0)),
+                        str(violation_config.get('yaw', 45.0))
+                    ])
             
             # Обновляем IP Rockchip в поле ввода
             rockchip_ip = config.get('rockchip', {}).get('ip', '')
@@ -562,6 +617,33 @@ def build_interface():
                 inputs=[fields['threshold']],
                 outputs=[status]
             )
+
+            # Дополнительные обработчики только для head_pose
+            if violation_type == 'head_pose':
+                if fields.get('center_pitch') is not None:
+                    fields['center_pitch'].change(
+                        fn=lambda value, vt=violation_type: update_config_param_text(vt, 'center_pitch', float(value) if value else 0.0),
+                        inputs=[fields['center_pitch']],
+                        outputs=[status]
+                    )
+                if fields.get('center_yaw') is not None:
+                    fields['center_yaw'].change(
+                        fn=lambda value, vt=violation_type: update_config_param_text(vt, 'center_yaw', float(value) if value else 0.0),
+                        inputs=[fields['center_yaw']],
+                        outputs=[status]
+                    )
+                if fields.get('pitch') is not None:
+                    fields['pitch'].change(
+                        fn=lambda value, vt=violation_type: update_config_param_text(vt, 'pitch', float(value) if value else 30.0),
+                        inputs=[fields['pitch']],
+                        outputs=[status]
+                    )
+                if fields.get('yaw') is not None:
+                    fields['yaw'].change(
+                        fn=lambda value, vt=violation_type: update_config_param_text(vt, 'yaw', float(value) if value else 45.0),
+                        inputs=[fields['yaw']],
+                        outputs=[status]
+                    )
         
         # Привязываем кнопки тревог
         clear_alarm_btn.click(clear_alarm_box, outputs=[alarm_box])
@@ -571,7 +653,8 @@ def build_interface():
         save_ip_btn.click(lambda ip: save_rockchip_ip(ip), [rockchip_ip_box], [status])
         save_local_rtsp_btn.click(save_local_rtsp_url, [local_rtsp_url], [status])
         
-        refresh_config_btn.click(refresh_config_from_api, None, [status] + violation_fields + [rockchip_ip_box, local_rtsp_url])
+        # Обновляем значения, включая дополнительные head_pose поля
+        refresh_config_btn.click(refresh_config_from_api, None, [status] + refresh_fields + [rockchip_ip_box, local_rtsp_url])
 
         # Автообновление окна RAW UDP тревог при получении новых сообщений
         alarm_timer = gr.Timer(value=1.0)  # Проверяем каждую секунду
