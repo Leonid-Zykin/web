@@ -34,6 +34,12 @@ frame_lock = threading.Lock()
 stream_alive = threading.Event()
 
 
+def _augment_rtsp_url_for_tcp(base_url: str) -> str:
+    sep = '&' if ('?' in base_url) else '?'
+    # stimeout в мкс (5 секунд)
+    return f"{base_url}{sep}rtsp_transport=tcp&stimeout=5000000"
+
+
 def rtsp_reader():
     import time
     import numpy as np
@@ -54,10 +60,19 @@ def rtsp_reader():
     global latest_frame
     global stream_alive
 
+    tcp_url = _augment_rtsp_url_for_tcp(RTSP_URL)
+
     while True:
-        cap = cv2.VideoCapture(RTSP_URL)
+        # Пытаемся открыть через FFmpeg бэкенд и TCP транспорт
+        print(f"[RTSP] Opening stream via FFmpeg (TCP): {tcp_url}")
+        cap = cv2.VideoCapture(tcp_url, cv2.CAP_FFMPEG)
+        # Уменьшаем буферизацию, чтобы снизить задержку
+        try:
+            cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+        except Exception:
+            pass
         if not cap.isOpened():
-            print(f"[ERROR] Could not open RTSP stream: {RTSP_URL}")
+            print(f"[ERROR] Could not open RTSP stream: {tcp_url}")
             with frame_lock:
                 latest_frame = blank.copy()
             stream_alive.clear()

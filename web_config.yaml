@@ -1,4 +1,4 @@
-api_host: "192.168.0.172"
+api_host: "100.92.90.73"
 api_port: 8000
-rtsp_stream_url: "rtsp://192.168.0.172:8554/stream"
+rtsp_stream_url: "ffplay rtsp://100.92.90.73:8554/processed"
 last_updated: ""

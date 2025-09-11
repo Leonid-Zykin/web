@@ -336,8 +336,8 @@ def build_interface():
                 )
                 save_local_rtsp_btn = gr.Button("💾 Сохранить локальный RTSP URL", variant="secondary")
                 
-
-                gr.HTML('<img src="http://localhost:5000/video" style="width:100%; max-width: 800px; border: 2px solid #444; border-radius: 8px;">')
+                mjpeg_host = web_config.get('api_host', 'localhost')
+                gr.HTML(f'<img src="http://{mjpeg_host}:5000/video" style="width:100%; max-width: 800px; border: 2px solid #444; border-radius: 8px;">')
             with gr.Column():
                 def update_alarm_box():
                     return get_raw_udp_text()
