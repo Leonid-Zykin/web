@@ -34,4 +34,8 @@ services:
     command: python mjpeg_server.py
     ports:
       - "5000:5000"
+    depends_on:
+      - rtsp-server
+    volumes:
+      - ./web_config.yaml:/app/web_config.yaml:ro
     restart: unless-stopped
