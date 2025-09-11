@@ -406,7 +406,8 @@ def build_interface():
                                     threshold_input = gr.Textbox(
                                         label="Уверенность", 
                                         value=str(violation_config.get('threshold', 0.5)),
-                                        interactive=True
+                                        interactive=True,
+                                        visible=(violation_type != 'head_pose')
                                     )
 
                                     # Дополнительные поля для Поворот головы
@@ -416,22 +417,22 @@ def build_interface():
                                     head_yaw_input = None
                                     if violation_type == 'head_pose':
                                         head_center_pitch_input = gr.Textbox(
-                                            label="Центр тангажа (center_pitch)",
+                                            label="Центр по вертикали",
                                             value=str(violation_config.get('center_pitch', 0.0)),
                                             interactive=True
                                         )
                                         head_center_yaw_input = gr.Textbox(
-                                            label="Центр рысканья (center_yaw)",
+                                            label="Центр по горизонтали",
                                             value=str(violation_config.get('center_yaw', 0.0)),
                                             interactive=True
                                         )
                                         head_pitch_input = gr.Textbox(
-                                            label="Порог тангажа (pitch)",
+                                            label="Порог по вертикали",
                                             value=str(violation_config.get('pitch', 30.0)),
                                             interactive=True
                                         )
                                         head_yaw_input = gr.Textbox(
-                                            label="Порог рысканья (yaw)",
+                                            label="Порог по горизонтали",
                                             value=str(violation_config.get('yaw', 45.0)),
                                             interactive=True
                                         )
