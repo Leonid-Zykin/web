@@ -368,7 +368,6 @@ def build_interface():
         VIOLATION_TRANSLATIONS = {
             'cigarette': 'Курение',
             'closed_eyes': 'Закрытые глаза',
-            'closed_eyes_duration': 'Длительность закрытых глаз',
             'head_pose': 'Поворот головы',
             'no_belt': 'Отсутствие ремня',
             'no_driver': 'Отсутствие водителя',
