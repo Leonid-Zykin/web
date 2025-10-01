@@ -159,6 +159,17 @@ def update_config_param_text(section, key, value):
     ok, msg = update_config_param(section, key, value)
     return (msg if ok else f"❌ {msg}")
 
+def call_head_calibrate(direction):
+    """Вызывает API калибровки положения головы с направлением left/right/up/down"""
+    try:
+        response = requests.post(f"{API_BASE_URL}/head_calibrate", json={"direction": direction}, timeout=10)
+        if response.status_code == 200:
+            return f"✅ Калибровка сохранена: {direction}"
+        else:
+            return f"❌ Ошибка API: {response.status_code} - {response.text}"
+    except Exception as e:
+        return f"❌ Ошибка подключения к API: {str(e)}"
+
 def stream_video(rtsp_url):
     if not rtsp_url:
         print("RTSP URL is empty. Returning blank image.")
@@ -436,6 +447,12 @@ def build_interface():
                                             value=str(violation_config.get('yaw', 45.0)),
                                             interactive=True
                                         )
+                                        with gr.Row():
+                                            left_btn = gr.Button("Запомнить левое", variant="secondary")
+                                            right_btn = gr.Button("Запомнить правое", variant="secondary")
+                                        with gr.Row():
+                                            up_btn = gr.Button("Запомнить верхнее", variant="secondary")
+                                            down_btn = gr.Button("Запомнить нижнее", variant="secondary")
                                 
                                 violation_blocks[violation_type] = {
                                     'enable': enable_checkbox,
@@ -645,6 +662,14 @@ def build_interface():
                         inputs=[fields['yaw']],
                         outputs=[status]
                     )
+                # Кнопки калибровки положения головы
+                try:
+                    left_btn.click(fn=lambda: call_head_calibrate('left'), outputs=[status])
+                    right_btn.click(fn=lambda: call_head_calibrate('right'), outputs=[status])
+                    up_btn.click(fn=lambda: call_head_calibrate('up'), outputs=[status])
+                    down_btn.click(fn=lambda: call_head_calibrate('down'), outputs=[status])
+                except NameError:
+                    pass
         
         # Привязываем кнопки тревог
         clear_alarm_btn.click(clear_alarm_box, outputs=[alarm_box])
