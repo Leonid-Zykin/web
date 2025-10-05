@@ -1,0 +1,41 @@
+version: '3.8'
+services:
+  gradio-app:
+    build: .
+    platform: linux/amd64
+    ports:
+      - "7860:7860"
+      - "8008:8008/udp"
+    volumes:
+      - ./config.yaml:/app/config.yaml
+    restart: unless-stopped
+    depends_on:
+      - mjpeg-server
+
+  rtsp-server:
+    image: bluenviron/mediamtx:latest
+    ports:
+      - "8554:8554"
+    volumes:
+      - ./rtsp-simple-server.yml:/rtsp-simple-server.yml:ro
+
+  ffmpeg:
+    image: lscr.io/linuxserver/ffmpeg:latest
+    depends_on:
+      - rtsp-server
+    devices:
+      - "/dev/video0:/dev/video0"
+    entrypoint: ["ffmpeg", "-f", "v4l2", "-i", "/dev/video0", "-c", "copy", "-f", "rtsp", "-rtsp_transport", "tcp", "rtsp://rtsp-server:8554/stream"]
+
+  mjpeg-server:
+    build:
+      context: .
+      dockerfile: mjpeg.Dockerfile
+    command: python mjpeg_server.py
+    ports:
+      - "5000:5000"
+    depends_on:
+      - rtsp-server
+    volumes:
+      - ./web_config.yaml:/app/web_config.yaml:ro
+    restart: unless-stopped
