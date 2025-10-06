@@ -388,84 +388,108 @@ def build_interface():
         }
         
         violation_blocks = {}
-        
-        # Создаем блоки для каждой тревоги, группируя по 3 в строку
-        violation_items = list(VIOLATION_TRANSLATIONS.items())
-        for i in range(0, len(violation_items), 3):
-            with gr.Row():
-                for j in range(3):
-                    if i + j < len(violation_items):
-                        violation_type, label = violation_items[i + j]
-                        violation_config = config.get(violation_type, {})
-                        
-                        with gr.Column():
-                            with gr.Group():
-                                with gr.Row():
-                                    gr.Markdown(f"**{label}**")
-                                    enable_checkbox = gr.Checkbox(
-                                        label="Включить", 
-                                        value=violation_config.get('enable', True),
-                                        interactive=True
-                                    )
-                                
-                                with gr.Column():
-                                    duration_input = gr.Textbox(
-                                        label="Длительность (сек)", 
-                                        value=str(violation_config.get('duration', 5)),
-                                        interactive=True
-                                    )
-                                    threshold_input = gr.Textbox(
-                                        label="Уверенность", 
-                                        value=str(violation_config.get('threshold', 0.5)),
-                                        interactive=True,
-                                        visible=(violation_type != 'head_pose')
-                                    )
 
-                                    # Дополнительные поля для Поворот головы
-                                    head_center_pitch_input = None
-                                    head_center_yaw_input = None
-                                    head_pitch_input = None
-                                    head_yaw_input = None
-                                    if violation_type == 'head_pose':
-                                        head_center_pitch_input = gr.Textbox(
-                                            label="Центр по вертикали",
-                                            value=str(violation_config.get('center_pitch', 0.0)),
-                                            interactive=True
-                                        )
-                                        head_center_yaw_input = gr.Textbox(
-                                            label="Центр по горизонтали",
-                                            value=str(violation_config.get('center_yaw', 0.0)),
-                                            interactive=True
-                                        )
-                                        head_pitch_input = gr.Textbox(
-                                            label="Порог по вертикали",
-                                            value=str(violation_config.get('pitch', 30.0)),
-                                            interactive=True
-                                        )
-                                        head_yaw_input = gr.Textbox(
-                                            label="Порог по горизонтали",
-                                            value=str(violation_config.get('yaw', 45.0)),
-                                            interactive=True
-                                        )
+        # Размещение: слева сетка из 4 блоков в ряд для всех, кроме head_pose; справа — отдельный блок head_pose
+        other_items = [(k, v) for k, v in VIOLATION_TRANSLATIONS.items() if k != 'head_pose']
+        with gr.Row():
+            # Левая колонка с сеткой 4х
+            with gr.Column(scale=2):
+                for i in range(0, len(other_items), 4):
+                    with gr.Row():
+                        for j in range(4):
+                            if i + j < len(other_items):
+                                violation_type, label = other_items[i + j]
+                                violation_config = config.get(violation_type, {})
+                                with gr.Column():
+                                    with gr.Group():
                                         with gr.Row():
-                                            left_btn = gr.Button("Запомнить левое", variant="secondary")
-                                            right_btn = gr.Button("Запомнить правое", variant="secondary")
-                                        with gr.Row():
-                                            up_btn = gr.Button("Запомнить верхнее", variant="secondary")
-                                            down_btn = gr.Button("Запомнить нижнее", variant="secondary")
-                                
-                                violation_blocks[violation_type] = {
-                                    'enable': enable_checkbox,
-                                    'duration': duration_input,
-                                    'threshold': threshold_input
-                                }
-                                if violation_type == 'head_pose':
-                                    violation_blocks[violation_type].update({
-                                        'center_pitch': head_center_pitch_input,
-                                        'center_yaw': head_center_yaw_input,
-                                        'pitch': head_pitch_input,
-                                        'yaw': head_yaw_input
-                                    })
+                                            gr.Markdown(f"**{label}**")
+                                            enable_checkbox = gr.Checkbox(
+                                                label="Включить", 
+                                                value=violation_config.get('enable', True),
+                                                interactive=True
+                                            )
+                                        with gr.Column():
+                                            duration_input = gr.Textbox(
+                                                label="Длительность (сек)", 
+                                                value=str(violation_config.get('duration', 5)),
+                                                interactive=True
+                                            )
+                                            threshold_input = gr.Textbox(
+                                                label="Уверенность", 
+                                                value=str(violation_config.get('threshold', 0.5)),
+                                                interactive=True
+                                            )
+                                    violation_blocks[violation_type] = {
+                                        'enable': enable_checkbox,
+                                        'duration': duration_input,
+                                        'threshold': threshold_input
+                                    }
+            # Правая колонка — head_pose
+            with gr.Column(scale=1):
+                violation_type = 'head_pose'
+                label = VIOLATION_TRANSLATIONS[violation_type]
+                violation_config = config.get(violation_type, {})
+                with gr.Group():
+                    with gr.Row():
+                        gr.Markdown(f"**{label}**")
+                        enable_checkbox = gr.Checkbox(
+                            label="Включить", 
+                            value=violation_config.get('enable', True),
+                            interactive=True
+                        )
+                    with gr.Column():
+                        duration_input = gr.Textbox(
+                            label="Длительность (сек)", 
+                            value=str(violation_config.get('duration', 5)),
+                            interactive=True
+                        )
+                        head_center_pitch_input = gr.Textbox(
+                            label="Центр по вертикали",
+                            value=str(violation_config.get('center_pitch', 0.0)),
+                            interactive=True
+                        )
+                        head_center_yaw_input = gr.Textbox(
+                            label="Центр по горизонтали",
+                            value=str(violation_config.get('center_yaw', 0.0)),
+                            interactive=True
+                        )
+                        head_pitch_input = gr.Textbox(
+                            label="Порог по вертикали",
+                            value=str(violation_config.get('pitch', 30.0)),
+                            interactive=True
+                        )
+                        head_yaw_input = gr.Textbox(
+                            label="Порог по горизонтали",
+                            value=str(violation_config.get('yaw', 45.0)),
+                            interactive=True
+                        )
+                        with gr.Row():
+                            left_btn = gr.Button("Запомнить левое", variant="secondary")
+                            right_btn = gr.Button("Запомнить правое", variant="secondary")
+                        with gr.Row():
+                            up_btn = gr.Button("Запомнить верхнее", variant="secondary")
+                            down_btn = gr.Button("Запомнить нижнее", variant="secondary")
+                        # Поля для отображения порогов калибровки в градусах
+                        hp_cfg = config.get('head_pose', {})
+                        raw_deg = hp_cfg.get('raw_deg', {})
+                        raw_left_box = gr.Textbox(label="Лево (°)", value=str(raw_deg.get('left', 0.0)), interactive=False)
+                        raw_right_box = gr.Textbox(label="Право (°)", value=str(raw_deg.get('right', 0.0)), interactive=False)
+                        raw_down_box = gr.Textbox(label="Вниз (°)", value=str(raw_deg.get('down', 0.0)), interactive=False)
+                        raw_up_box = gr.Textbox(label="Вверх (°)", value=str(raw_deg.get('up', 0.0)), interactive=False)
+                violation_blocks[violation_type] = {
+                    'enable': enable_checkbox,
+                    'duration': duration_input,
+                    'threshold': gr.Textbox(visible=False),
+                    'center_pitch': head_center_pitch_input,
+                    'center_yaw': head_center_yaw_input,
+                    'pitch': head_pitch_input,
+                    'yaw': head_yaw_input,
+                    'raw_left': raw_left_box,
+                    'raw_right': raw_right_box,
+                    'raw_down': raw_down_box,
+                    'raw_up': raw_up_box
+                }
         
         # --- Rockchip IP ---
         with gr.Row():
@@ -584,9 +608,9 @@ def build_interface():
             if not config:
                 return "❌ Не удалось загрузить конфигурацию из API"
             
-            # Обновляем блоки тревог
+            # Обновляем блоки тревог в ТОЧНОМ порядке, как сформирован violation_blocks (соответствует refresh_fields)
             violation_updates = []
-            for violation_type in VIOLATION_TRANSLATIONS:
+            for violation_type in violation_blocks.keys():
                 violation_config = config.get(violation_type, {})
                 # Базовые поля
                 violation_updates.extend([
@@ -609,7 +633,13 @@ def build_interface():
             # Обновляем локальный RTSP URL
             local_rtsp_url_value = web_config.get('rtsp_stream_url', DEFAULT_URL1)
             
-            return ["✅ Конфигурация обновлена из API"] + violation_updates + [rockchip_ip, local_rtsp_url_value]
+            # Возвращаем данные: статус + значения полей + 4 калибровки в градусах + ip и rtsp
+            raw_deg = config.get('head_pose', {}).get('raw_deg', {})
+            raw_left = str(raw_deg.get('left', 0.0))
+            raw_right = str(raw_deg.get('right', 0.0))
+            raw_down = str(raw_deg.get('down', 0.0))
+            raw_up = str(raw_deg.get('up', 0.0))
+            return ["✅ Конфигурация обновлена из API"] + violation_updates + [raw_left, raw_right, raw_down, raw_up, rockchip_ip, local_rtsp_url_value]
         
         # --- Привязка событий ---
         
@@ -679,8 +709,21 @@ def build_interface():
         save_ip_btn.click(lambda ip: save_rockchip_ip(ip), [rockchip_ip_box], [status])
         save_local_rtsp_btn.click(save_local_rtsp_url, [local_rtsp_url], [status])
         
-        # Обновляем значения, включая дополнительные head_pose поля
-        refresh_config_btn.click(refresh_config_from_api, None, [status] + refresh_fields + [rockchip_ip_box, local_rtsp_url])
+        # Обновляем значения, включая дополнительные head_pose поля, плюс 4 калибровки в градусах
+        refresh_config_btn.click(
+            refresh_config_from_api,
+            None,
+            [
+                status,
+                *refresh_fields,
+                violation_blocks['head_pose']['raw_left'],
+                violation_blocks['head_pose']['raw_right'],
+                violation_blocks['head_pose']['raw_down'],
+                violation_blocks['head_pose']['raw_up'],
+                rockchip_ip_box,
+                local_rtsp_url,
+            ],
+        )
 
         # Автообновление окна RAW UDP тревог при получении новых сообщений
         alarm_timer = gr.Timer(value=1.0)  # Проверяем каждую секунду
