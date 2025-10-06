@@ -17,7 +17,7 @@ services:
     ports:
       - "8554:8554"
     volumes:
-      - ./rtsp-simple-server.yml:/rtsp-simple-server.yml:ro
+      - ./rtsp-simple-server.yml:/mediamtx.yml:ro
 
   ffmpeg:
     image: lscr.io/linuxserver/ffmpeg:latest
