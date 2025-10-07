@@ -160,11 +160,11 @@ def update_config_param_text(section, key, value):
     return (msg if ok else f"❌ {msg}")
 
 def call_head_calibrate(direction):
-    """Вызывает API калибровки положения головы с направлением left/right/up/down"""
+    """Отправляет команду калибровки; ядро возьмет текущие градусы и сохранит в raw_deg"""
     try:
         response = requests.post(f"{API_BASE_URL}/head_calibrate", json={"direction": direction}, timeout=10)
         if response.status_code == 200:
-            return f"✅ Калибровка сохранена: {direction}"
+            return f"✅ Калибровка отправлена: {direction}"
         else:
             return f"❌ Ошибка API: {response.status_code} - {response.text}"
     except Exception as e:
@@ -458,23 +458,23 @@ def build_interface():
                             interactive=True
                         )
                         head_center_pitch_input = gr.Textbox(
-                            label="Центр по вертикали",
-                            value=str(violation_config.get('center_pitch', 0.0)),
+                            label="Центр по вертикали (0..1)",
+                            value=str(violation_config.get('center_pitch', 0.5)),
                             interactive=True
                         )
                         head_center_yaw_input = gr.Textbox(
-                            label="Центр по горизонтали",
-                            value=str(violation_config.get('center_yaw', 0.0)),
+                            label="Центр по горизонтали (0..1)",
+                            value=str(violation_config.get('center_yaw', 0.5)),
                             interactive=True
                         )
                         head_pitch_input = gr.Textbox(
-                            label="Порог по вертикали",
-                            value=str(violation_config.get('pitch', 30.0)),
+                            label="Порог по вертикали (0..1)",
+                            value=str(violation_config.get('pitch', 0.2)),
                             interactive=True
                         )
                         head_yaw_input = gr.Textbox(
-                            label="Порог по горизонтали",
-                            value=str(violation_config.get('yaw', 45.0)),
+                            label="Порог по горизонтали (0..1)",
+                            value=str(violation_config.get('yaw', 0.2)),
                             interactive=True
                         )
                         with gr.Row():
@@ -634,10 +634,10 @@ def build_interface():
                 # Дополнительные поля для head_pose (в порядке, соответствующем refresh_fields)
                 if violation_type == 'head_pose':
                     violation_updates.extend([
-                        str(violation_config.get('center_pitch', 0.0)),
-                        str(violation_config.get('center_yaw', 0.0)),
-                        str(violation_config.get('pitch', 30.0)),
-                        str(violation_config.get('yaw', 45.0))
+                        str(violation_config.get('center_pitch', 0.5)),
+                        str(violation_config.get('center_yaw', 0.5)),
+                        str(violation_config.get('pitch', 0.2)),
+                        str(violation_config.get('yaw', 0.2))
                     ])
             
             # Обновляем IP Rockchip в поле ввода
@@ -683,25 +683,25 @@ def build_interface():
             if violation_type == 'head_pose':
                 if fields.get('center_pitch') is not None:
                     fields['center_pitch'].change(
-                        fn=lambda value, vt=violation_type: update_config_param_text(vt, 'center_pitch', float(value) if value else 0.0),
+                        fn=lambda value, vt=violation_type: update_config_param_text(vt, 'center_pitch', max(0.0, min(1.0, float(value) if value else 0.5))),
                         inputs=[fields['center_pitch']],
                         outputs=[status]
                     )
                 if fields.get('center_yaw') is not None:
                     fields['center_yaw'].change(
-                        fn=lambda value, vt=violation_type: update_config_param_text(vt, 'center_yaw', float(value) if value else 0.0),
+                        fn=lambda value, vt=violation_type: update_config_param_text(vt, 'center_yaw', max(0.0, min(1.0, float(value) if value else 0.5))),
                         inputs=[fields['center_yaw']],
                         outputs=[status]
                     )
                 if fields.get('pitch') is not None:
                     fields['pitch'].change(
-                        fn=lambda value, vt=violation_type: update_config_param_text(vt, 'pitch', float(value) if value else 30.0),
+                        fn=lambda value, vt=violation_type: update_config_param_text(vt, 'pitch', max(0.0, min(1.0, float(value) if value else 0.2))),
                         inputs=[fields['pitch']],
                         outputs=[status]
                     )
                 if fields.get('yaw') is not None:
                     fields['yaw'].change(
-                        fn=lambda value, vt=violation_type: update_config_param_text(vt, 'yaw', float(value) if value else 45.0),
+                        fn=lambda value, vt=violation_type: update_config_param_text(vt, 'yaw', max(0.0, min(1.0, float(value) if value else 0.2))),
                         inputs=[fields['yaw']],
                         outputs=[status]
                     )
