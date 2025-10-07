@@ -768,6 +768,177 @@ def build_interface():
         save_ip_btn.click(lambda ip: save_rockchip_ip(ip), [rockchip_ip_box], [status])
         save_local_rtsp_btn.click(save_local_rtsp_url, [local_rtsp_url], [status])
         
+        # --- Настройки усталости ---
+        gr.Markdown("### Настройки усталости (fatigue)")
+        with gr.Row():
+            fatigue_enable = gr.Checkbox(label="Включить усталость", value=bool(config.get('fatigue', {}).get('enable', False)), interactive=True)
+            fatigue_window = gr.Textbox(label="Окно, секунд", value=str(config.get('fatigue', {}).get('window_seconds', 60)), interactive=True)
+        with gr.Group():
+            gr.Markdown("#### Композитная логика")
+            with gr.Row():
+                comp_enable = gr.Checkbox(label="Включить композитную сумму", value=bool(config.get('fatigue', {}).get('composite', {}).get('enable', False)), interactive=True)
+                comp_target = gr.Textbox(label="Целевая сумма событий", value=str(config.get('fatigue', {}).get('composite', {}).get('target_sum', 3)), interactive=True)
+        with gr.Group():
+            gr.Markdown("#### Длинные моргания")
+            with gr.Row():
+                lb_enable = gr.Checkbox(label="Включить длинные моргания", value=bool(config.get('fatigue', {}).get('long_blinks', {}).get('enable', False)), interactive=True)
+                lb_ear = gr.Textbox(label="EAR порог (пусто = closed_eyes.threshold)", value=str(config.get('fatigue', {}).get('long_blinks', {}).get('ear_threshold', '')), interactive=True)
+            with gr.Row():
+                lb_min = gr.Textbox(label="Мин. длительность, c", value=str(config.get('fatigue', {}).get('long_blinks', {}).get('min_duration_s', 0.1)), interactive=True)
+                lb_max = gr.Textbox(label="Макс. длительность, c", value=str(config.get('fatigue', {}).get('long_blinks', {}).get('max_duration_s', 0.4)), interactive=True)
+                lb_count = gr.Textbox(label="Мин. число событий", value=str(config.get('fatigue', {}).get('long_blinks', {}).get('min_count', 3)), interactive=True)
+        with gr.Group():
+            gr.Markdown("#### Тренд межморганий")
+            with gr.Row():
+                it_enable = gr.Checkbox(label="Включить тренд межморганий", value=bool(config.get('fatigue', {}).get('interblink_trend', {}).get('enable', False)), interactive=True)
+                it_ear = gr.Textbox(label="EAR порог (пусто = closed_eyes.threshold)", value=str(config.get('fatigue', {}).get('interblink_trend', {}).get('ear_threshold', '')), interactive=True)
+            with gr.Row():
+                it_min_intervals = gr.Textbox(label="Мин. интервалов (>=5)", value=str(config.get('fatigue', {}).get('interblink_trend', {}).get('min_intervals', 5)), interactive=True)
+                it_avg_span = gr.Textbox(label="Окно среднего (штук)", value=str(config.get('fatigue', {}).get('interblink_trend', {}).get('avg_span', 5)), interactive=True)
+                it_decrease_ms = gr.Textbox(label="Падение среднего, мс", value=str(config.get('fatigue', {}).get('interblink_trend', {}).get('decrease_ms', 50)), interactive=True)
+                it_min_trend_events = gr.Textbox(label="Мин. событий тренда", value=str(config.get('fatigue', {}).get('interblink_trend', {}).get('min_trend_events', 3)), interactive=True)
+        with gr.Group():
+            gr.Markdown("#### Зевки")
+            with gr.Row():
+                y_enable = gr.Checkbox(label="Включить зевки", value=bool(config.get('fatigue', {}).get('yawn', {}).get('enable', False)), interactive=True)
+                y_mar = gr.Textbox(label="MAR порог (пусто = yawn.threshold)", value=str(config.get('fatigue', {}).get('yawn', {}).get('mar_threshold', '')), interactive=True)
+            with gr.Row():
+                y_min = gr.Textbox(label="Мин. длительность, c", value=str(config.get('fatigue', {}).get('yawn', {}).get('min_duration_s', 0.4)), interactive=True)
+                y_count = gr.Textbox(label="Мин. число событий", value=str(config.get('fatigue', {}).get('yawn', {}).get('min_count', 2)), interactive=True)
+        with gr.Group():
+            gr.Markdown("#### «Клевки» головой")
+            with gr.Row():
+                hn_enable = gr.Checkbox(label="Включить клевки головой", value=bool(config.get('fatigue', {}).get('head_nod', {}).get('enable', False)), interactive=True)
+                hn_pitch_down = gr.Textbox(label="Порог вниз, °", value=str(config.get('fatigue', {}).get('head_nod', {}).get('pitch_down_delta_deg', 10.0)), interactive=True)
+            with gr.Row():
+                hn_min_down = gr.Textbox(label="Мин. удержание вниз, c", value=str(config.get('fatigue', {}).get('head_nod', {}).get('min_down_duration_s', 0.3)), interactive=True)
+                hn_hyst = gr.Textbox(label="Гистерезис, °", value=str(config.get('fatigue', {}).get('head_nod', {}).get('hysteresis_deg', 3.0)), interactive=True)
+                hn_count = gr.Textbox(label="Мин. число событий", value=str(config.get('fatigue', {}).get('head_nod', {}).get('min_count', 2)), interactive=True)
+
+        with gr.Row():
+            fatigue_refresh_btn = gr.Button("🔄 Обновить усталость из API", variant="secondary")
+            fatigue_save_btn = gr.Button("💾 Сохранить усталость", variant="primary")
+
+        def fatigue_refresh():
+            cfg = load_config_from_api() or {}
+            f = cfg.get('fatigue', {}) if isinstance(cfg, dict) else {}
+            def _g(path, default):
+                try:
+                    cur = f
+                    for k in path.split('.'):
+                        cur = cur.get(k, {}) if isinstance(cur, dict) else {}
+                    return cur if isinstance(cur, (str, int, float, bool)) else default
+                except Exception:
+                    return default
+            return [
+                bool(f.get('enable', False)),
+                str(f.get('window_seconds', 60)),
+                bool(f.get('composite', {}).get('enable', False)),
+                str(f.get('composite', {}).get('target_sum', 3)),
+                bool(f.get('long_blinks', {}).get('enable', False)),
+                str(f.get('long_blinks', {}).get('ear_threshold', '')),
+                str(f.get('long_blinks', {}).get('min_duration_s', 0.1)),
+                str(f.get('long_blinks', {}).get('max_duration_s', 0.4)),
+                str(f.get('long_blinks', {}).get('min_count', 3)),
+                bool(f.get('interblink_trend', {}).get('enable', False)),
+                str(f.get('interblink_trend', {}).get('ear_threshold', '')),
+                str(f.get('interblink_trend', {}).get('min_intervals', 5)),
+                str(f.get('interblink_trend', {}).get('avg_span', 5)),
+                str(f.get('interblink_trend', {}).get('decrease_ms', 50)),
+                str(f.get('interblink_trend', {}).get('min_trend_events', 3)),
+                bool(f.get('yawn', {}).get('enable', False)),
+                str(f.get('yawn', {}).get('mar_threshold', '')),
+                str(f.get('yawn', {}).get('min_duration_s', 0.4)),
+                str(f.get('yawn', {}).get('min_count', 2)),
+                bool(f.get('head_nod', {}).get('enable', False)),
+                str(f.get('head_nod', {}).get('pitch_down_delta_deg', 10.0)),
+                str(f.get('head_nod', {}).get('min_down_duration_s', 0.3)),
+                str(f.get('head_nod', {}).get('hysteresis_deg', 3.0)),
+                str(f.get('head_nod', {}).get('min_count', 2)),
+            ]
+
+        def fatigue_save(*vals):
+            try:
+                cfg = load_config_from_api() or {}
+                f = cfg.get('fatigue', {}) if isinstance(cfg, dict) else {}
+                # распаковка порядка из fatigue_refresh
+                (
+                    v_enable, v_window,
+                    c_enable, c_target,
+                    lb_enable_v, lb_ear_v, lb_min_v, lb_max_v, lb_count_v,
+                    it_enable_v, it_ear_v, it_min_int_v, it_avg_span_v, it_dec_ms_v, it_min_trend_v,
+                    y_enable_v, y_mar_v, y_min_v, y_count_v,
+                    hn_enable_v, hn_pitch_v, hn_min_down_v, hn_hyst_v, hn_count_v
+                ) = vals
+                # базовые
+                f['enable'] = bool(v_enable)
+                f['window_seconds'] = int(float(v_window)) if str(v_window).strip() else 60
+                # composite
+                f.setdefault('composite', {})
+                f['composite']['enable'] = bool(c_enable)
+                f['composite']['target_sum'] = int(float(c_target)) if str(c_target).strip() else 3
+                # long_blinks
+                f.setdefault('long_blinks', {})
+                f['long_blinks']['enable'] = bool(lb_enable_v)
+                f['long_blinks']['ear_threshold'] = None if str(lb_ear_v).strip()=='' else float(lb_ear_v)
+                f['long_blinks']['min_duration_s'] = float(lb_min_v)
+                f['long_blinks']['max_duration_s'] = float(lb_max_v)
+                f['long_blinks']['min_count'] = int(float(lb_count_v))
+                # interblink_trend
+                f.setdefault('interblink_trend', {})
+                f['interblink_trend']['enable'] = bool(it_enable_v)
+                f['interblink_trend']['ear_threshold'] = None if str(it_ear_v).strip()=='' else float(it_ear_v)
+                f['interblink_trend']['min_intervals'] = max(5, int(float(it_min_int_v)))
+                f['interblink_trend']['avg_span'] = int(float(it_avg_span_v))
+                f['interblink_trend']['decrease_ms'] = int(float(it_dec_ms_v))
+                f['interblink_trend']['min_trend_events'] = int(float(it_min_trend_v))
+                # yawn
+                f.setdefault('yawn', {})
+                f['yawn']['enable'] = bool(y_enable_v)
+                f['yawn']['mar_threshold'] = None if str(y_mar_v).strip()=='' else float(y_mar_v)
+                f['yawn']['min_duration_s'] = float(y_min_v)
+                f['yawn']['min_count'] = int(float(y_count_v))
+                # head_nod
+                f.setdefault('head_nod', {})
+                f['head_nod']['enable'] = bool(hn_enable_v)
+                f['head_nod']['pitch_down_delta_deg'] = float(hn_pitch_v)
+                f['head_nod']['min_down_duration_s'] = float(hn_min_down_v)
+                f['head_nod']['hysteresis_deg'] = float(hn_hyst_v)
+                f['head_nod']['min_count'] = int(float(hn_count_v))
+                cfg['fatigue'] = f
+                # полное сохранение через PUT
+                resp = requests.put(f"{API_BASE_URL}/config", json=cfg, timeout=10)
+                if resp.status_code == 200:
+                    return "✅ Настройки усталости сохранены"
+                return f"❌ Ошибка API: {resp.status_code} - {resp.text}"
+            except Exception as e:
+                return f"❌ Ошибка сохранения: {str(e)}"
+
+        fatigue_refresh_btn.click(
+            fn=fatigue_refresh,
+            outputs=[
+                fatigue_enable, fatigue_window,
+                comp_enable, comp_target,
+                lb_enable, lb_ear, lb_min, lb_max, lb_count,
+                it_enable, it_ear, it_min_intervals, it_avg_span, it_decrease_ms, it_min_trend_events,
+                y_enable, y_mar, y_min, y_count,
+                hn_enable, hn_pitch_down, hn_min_down, hn_hyst, hn_count,
+            ]
+        )
+
+        fatigue_save_btn.click(
+            fn=fatigue_save,
+            inputs=[
+                fatigue_enable, fatigue_window,
+                comp_enable, comp_target,
+                lb_enable, lb_ear, lb_min, lb_max, lb_count,
+                it_enable, it_ear, it_min_intervals, it_avg_span, it_decrease_ms, it_min_trend_events,
+                y_enable, y_mar, y_min, y_count,
+                hn_enable, hn_pitch_down, hn_min_down, hn_hyst, hn_count,
+            ],
+            outputs=[status]
+        )
+
         # Обновляем значения, включая дополнительные head_pose поля, плюс 4 калибровки в градусах
         refresh_config_btn.click(
             refresh_config_from_api,
