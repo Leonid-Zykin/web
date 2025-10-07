@@ -25,7 +25,7 @@ services:
       - rtsp-server
     volumes:
       - ./video.mp4:/video.mp4:ro
-    entrypoint: ["ffmpeg", "-re", "-stream_loop", "-1", "-i", "/video.mp4", "-c", "copy", "-f", "rtsp", "-rtsp_transport", "tcp", "rtsp://rtsp-server:8554/stream"]
+    entrypoint: ["ffmpeg", "-re", "-stream_loop", "-1", "-i", "/video.mp4", "-c", "copy", "-f", "rtsp", "-rtsp_transport", "tcp", "rtsp://rtsp-server:8554/processed"]
 
   mjpeg-server:
     build:

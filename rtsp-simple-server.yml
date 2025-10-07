@@ -1,3 +1,5 @@
 paths:
+  processed:
+    source: publisher
   all:
     source: publisher 
