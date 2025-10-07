@@ -177,10 +177,15 @@ def calibrate_and_refresh(direction):
     cfg = load_config_from_api()
     hp_cfg = cfg.get('head_pose', {}) if isinstance(cfg, dict) else {}
     raw_deg = hp_cfg.get('raw_deg', {}) if isinstance(hp_cfg, dict) else {}
-    left = str(raw_deg.get('left', 0.0))
-    right = str(raw_deg.get('right', 0.0))
-    down = str(raw_deg.get('down', 0.0))
-    up = str(raw_deg.get('up', 0.0))
+    def fmt1(v):
+        try:
+            return f"{float(v):.1f}"
+        except Exception:
+            return "0.0"
+    left = fmt1(raw_deg.get('left', 0.0))
+    right = fmt1(raw_deg.get('right', 0.0))
+    down = fmt1(raw_deg.get('down', 0.0))
+    up = fmt1(raw_deg.get('up', 0.0))
     return [msg, left, right, down, up]
 
 def stream_video(rtsp_url):
@@ -648,10 +653,15 @@ def build_interface():
             
             # Возвращаем данные: статус + значения полей + 4 калибровки в градусах + ip и rtsp
             raw_deg = config.get('head_pose', {}).get('raw_deg', {})
-            raw_left = str(raw_deg.get('left', 0.0))
-            raw_right = str(raw_deg.get('right', 0.0))
-            raw_down = str(raw_deg.get('down', 0.0))
-            raw_up = str(raw_deg.get('up', 0.0))
+            def fmt1(v):
+                try:
+                    return f"{float(v):.1f}"
+                except Exception:
+                    return "0.0"
+            raw_left = fmt1(raw_deg.get('left', 0.0))
+            raw_right = fmt1(raw_deg.get('right', 0.0))
+            raw_down = fmt1(raw_deg.get('down', 0.0))
+            raw_up = fmt1(raw_deg.get('up', 0.0))
             return ["✅ Конфигурация обновлена из API"] + violation_updates + [raw_left, raw_right, raw_down, raw_up, rockchip_ip, local_rtsp_url_value]
         
         # --- Привязка событий ---
