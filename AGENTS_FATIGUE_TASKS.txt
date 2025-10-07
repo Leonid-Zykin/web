@@ -1,0 +1,126 @@
+План параллельной разработки агрегата «усталость»
+
+Общие правила ведения этого файла
+- Все задачи в этом файле помечайте статусом. Выполненные отмечайте символом ✅ прямо в строке задачи.
+- Ориентируйтесь на зависимости между агентами. Независимые задачи — запускайте параллельно.
+- Если внесены правки в код/конфиг, соблюдайте стандартный workflow коммита/деплоя проекта.
+
+Зависимости (кратко)
+- Agent A3 (длинные моргания) и A4 (тренд межморганий) зависят от A2 (буферы/состояния).
+- Agent A7 (агрегатор) зависит от A3–A6.
+- Agent A8 (интеграция в цикл) зависит от A2–A7.
+- Agent A11 (прогон на устройстве) — финальный шаг после A8 и тестов A9.
+
+Справочные поля данных (уже есть в коде)
+- EAR, MAR, yaw, pitch, pitch_norm, yaw_norm, center_pitch_norm, center_yaw_norm — доступны из VisionProcessor и/или в data потока.
+
+------------------------------
+Agent A1 — Конфигурация fatigue (можно параллельно)
+Задача: ✅ Добавить раздел fatigue в opi5test/core/config.yaml с полями и дефолтами:
+- fatigue.enable
+- fatigue.window_seconds
+- fatigue.composite.enable
+- fatigue.composite.target_sum
+- fatigue.long_blinks.enable
+- fatigue.long_blinks.ear_threshold (fallback на closed_eyes.threshold)
+- fatigue.long_blinks.min_duration_s, max_duration_s, min_count
+- fatigue.interblink_trend.enable
+- fatigue.interblink_trend.ear_threshold
+- fatigue.interblink_trend.min_intervals (>4), avg_span, decrease_ms, min_trend_events
+- fatigue.yawn.enable
+- fatigue.yawn.mar_threshold, min_duration_s, min_count
+- fatigue.head_nod.enable
+- fatigue.head_nod.pitch_down_delta_deg, min_down_duration_s, hysteresis_deg, min_count
+Критерий готовности: YAML валиден, загружается без ошибок, значения читаются из violations.py.
+Статус: ✅ Выполнено — раздел добавлен, чтение реализовано в violations.py (FATIGUE)
+
+
+
+
+
+
+------------------------------
+Agent A2 — Базовые буферы, состояния и очистка окна (можно параллельно)
+Задача: В opi5test/core/violations.py добавить:
+- Деки/буферы: blinks, blink_timestamps, interblink_intervals, interblink_moving_averages, trend_events, yawn_timestamps, nod_timestamps
+- Счётчики: fatigue_components_counts = {long_blinks, interblink_trend, yawn, head_nod}
+- Флаги/времена: eye_state, eye_start_time; yawn_state, yawn_start_time; nod_state, nod_start_time
+- Функция cleanup_old(now, window_s) — удаляет элементы старше окна во всех деках
+Критерий готовности: модуль импортируется; cleanup_old удаляет устаревшие элементы корректно.
+Статус: ✅
+
+------------------------------
+Agent A3 — Длинные моргания (зависит от A2)
+Задача: Реализовать update_eye_state_and_blinks(data, now, cfg):
+- Порог закрытых глаз по EAR: из fatigue.long_blinks.ear_threshold (fallback на closed_eyes.threshold)
+- Фиксировать переходы open→closed (запомнить eye_start_time) и closed→open (посчитать duration)
+- Если min_duration_s ≤ duration ≤ max_duration_s —
+  • записать событие в blinks,
+  • инкрементировать fatigue_components_counts["long_blinks"],
+  • добавить метку закрытия в blink_timestamps для последующего расчёта интервалов
+- Устойчивость к дребезгу (не дублировать без смены состояния)
+Критерий готовности: корректные инкременты при реальных длинных морганиях; отсутствуют ложные срабатывания при коротких.
+Статус: ✅
+
+------------------------------
+Agent A4 — Тренд межморганий (зависит от A2, A3)
+Задача: Реализовать update_interblink_trend(now, cfg):
+- Из blink_timestamps формировать interblink_intervals (секунды), поддерживать в окне
+- При количестве интервалов ≥ min_intervals рассчитывать скользящее среднее по последним avg_span
+- Если новое среднее < предыдущего на decrease_ms (в секундах) —
+  • добавить событие в trend_events,
+  • инкрементировать fatigue_components_counts["interblink_trend"]
+Критерий готовности: фиксируются события «уменьшения» без спама; корректная работа окон.
+Статус: ✅
+
+------------------------------
+Agent A5 — Зевки (можно параллельно с A3/A4)
+Задача: Реализовать update_yawn_events(data, now, cfg):
+- Состояние «рот открыт» при MAR > mar_threshold
+- Считать длительность «открыт»; событие зевка фиксировать при закрытии после min_duration_s
+- Инкрементировать fatigue_components_counts["yawn"], добавлять метку в yawn_timestamps
+Критерий готовности: устойчивое детектирование длинных открытий рта; без повторов в одном удержании.
+Статус: ✅
+
+
+
+
+
+------------------------------
+Agent A6 — «Клевки» головой (можно параллельно с A5)
+Задача: Реализовать update_head_nods(data, now, cfg):
+- Определение «вниз» по pitch относительно центра на pitch_down_delta_deg (или эквивалент через нормаль)
+- Удержание «вниз» ≥ min_down_duration_s, затем возврат «вверх» с гистерезисом hysteresis_deg
+- На цикл вниз→вверх: инкрементировать fatigue_components_counts["head_nod"], добавить метку в nod_timestamps
+Критерий готовности: одно событие на один цикл, устойчивость к шуму.
+Статус: 
+
+------------------------------
+Agent A7 — Агрегатор тревоги «усталость» (зависит от A3–A6)
+Задача: Реализовать check_fatigue_alarm(now, data, cfg):
+- Если любой включённый компонент достиг своего min_count в окне — поднять тревогу «fatigue»
+- Если composite.enable — суммировать включённые компоненты; при sum ≥ target_sum — поднять «fatigue»
+- Интегрировать с active_alarms: send_dsm_alarm("fatigue", data, value=1) и send_alarm_reset("fatigue", data) при падении ниже порогов
+Критерий готовности: корректное поднятие/сброс без конфликтов с существующими тревогами.
+Статус: 
+
+------------------------------
+Agent A8 — Интеграция в основной цикл (зависит от A2–A7)
+Задача: В process_violations(data) вызывать по порядку:
+- cleanup_old, update_eye_state_and_blinks, update_interblink_trend, update_yawn_events, update_head_nods, check_fatigue_alarm
+- Добавить диагностические поля в data: long_blinks_count, interblink_trend_count, yawn_count, head_nod_count, fatigue_sum (если composite.enable)
+Критерий готовности: поток отрабатывает без исключений; существующие тревоги не сломаны.
+Статус: 
+
+------------------------------
+
+
+------------------------------
+Agent A10 — Логирование и телеметрия (можно параллельно)
+Задача: Добавить компактные логи при инкременте компонентов и при поднятии/сбросе «fatigue»; не засорять консоль.
+Критерий готовности: читаемые, информативные сообщения в ключевых точках.
+Статус: 
+
+------------------------------
+
+
