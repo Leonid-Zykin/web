@@ -170,6 +170,19 @@ def call_head_calibrate(direction):
     except Exception as e:
         return f"❌ Ошибка подключения к API: {str(e)}"
 
+def calibrate_and_refresh(direction):
+    """Вызывает калибровку и возвращает статус и обновленные градусы (left,right,down,up)."""
+    msg = call_head_calibrate(direction)
+    # После калибровки сразу тянем актуальный конфиг, чтобы обновить градусы
+    cfg = load_config_from_api()
+    hp_cfg = cfg.get('head_pose', {}) if isinstance(cfg, dict) else {}
+    raw_deg = hp_cfg.get('raw_deg', {}) if isinstance(hp_cfg, dict) else {}
+    left = str(raw_deg.get('left', 0.0))
+    right = str(raw_deg.get('right', 0.0))
+    down = str(raw_deg.get('down', 0.0))
+    up = str(raw_deg.get('up', 0.0))
+    return [msg, left, right, down, up]
+
 def stream_video(rtsp_url):
     if not rtsp_url:
         print("RTSP URL is empty. Returning blank image.")
@@ -694,10 +707,46 @@ def build_interface():
                     )
                 # Кнопки калибровки положения головы
                 try:
-                    left_btn.click(fn=lambda: call_head_calibrate('left'), outputs=[status])
-                    right_btn.click(fn=lambda: call_head_calibrate('right'), outputs=[status])
-                    up_btn.click(fn=lambda: call_head_calibrate('up'), outputs=[status])
-                    down_btn.click(fn=lambda: call_head_calibrate('down'), outputs=[status])
+                    left_btn.click(
+                        fn=lambda: calibrate_and_refresh('left'),
+                        outputs=[
+                            status,
+                            violation_blocks['head_pose']['raw_left'],
+                            violation_blocks['head_pose']['raw_right'],
+                            violation_blocks['head_pose']['raw_down'],
+                            violation_blocks['head_pose']['raw_up'],
+                        ],
+                    )
+                    right_btn.click(
+                        fn=lambda: calibrate_and_refresh('right'),
+                        outputs=[
+                            status,
+                            violation_blocks['head_pose']['raw_left'],
+                            violation_blocks['head_pose']['raw_right'],
+                            violation_blocks['head_pose']['raw_down'],
+                            violation_blocks['head_pose']['raw_up'],
+                        ],
+                    )
+                    up_btn.click(
+                        fn=lambda: calibrate_and_refresh('up'),
+                        outputs=[
+                            status,
+                            violation_blocks['head_pose']['raw_left'],
+                            violation_blocks['head_pose']['raw_right'],
+                            violation_blocks['head_pose']['raw_down'],
+                            violation_blocks['head_pose']['raw_up'],
+                        ],
+                    )
+                    down_btn.click(
+                        fn=lambda: calibrate_and_refresh('down'),
+                        outputs=[
+                            status,
+                            violation_blocks['head_pose']['raw_left'],
+                            violation_blocks['head_pose']['raw_right'],
+                            violation_blocks['head_pose']['raw_down'],
+                            violation_blocks['head_pose']['raw_up'],
+                        ],
+                    )
                 except NameError:
                     pass
         
