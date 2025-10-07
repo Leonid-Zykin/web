@@ -482,6 +482,11 @@ def build_interface():
                             value=str(violation_config.get('yaw', 0.2)),
                             interactive=True
                         )
+                        mask_absence_timeout_input = gr.Textbox(
+                            label="Таймаут отсутствия маски (сек)",
+                            value=str(violation_config.get('mask_absence_timeout', 3.0)),
+                            interactive=True
+                        )
                         with gr.Row():
                             left_btn = gr.Button("Запомнить левое", variant="secondary")
                             right_btn = gr.Button("Запомнить правое", variant="secondary")
@@ -503,6 +508,7 @@ def build_interface():
                     'center_yaw': head_center_yaw_input,
                     'pitch': head_pitch_input,
                     'yaw': head_yaw_input,
+                    'mask_absence_timeout': mask_absence_timeout_input,
                     'raw_left': raw_left_box,
                     'raw_right': raw_right_box,
                     'raw_down': raw_down_box,
@@ -530,7 +536,8 @@ def build_interface():
                     fields.get('center_pitch'),
                     fields.get('center_yaw'),
                     fields.get('pitch'),
-                    fields.get('yaw')
+                    fields.get('yaw'),
+                    fields.get('mask_absence_timeout')
                 ])
         
         # --- Обработчики событий ---
@@ -642,7 +649,8 @@ def build_interface():
                         str(violation_config.get('center_pitch', 0.5)),
                         str(violation_config.get('center_yaw', 0.5)),
                         str(violation_config.get('pitch', 0.2)),
-                        str(violation_config.get('yaw', 0.2))
+                        str(violation_config.get('yaw', 0.2)),
+                        str(violation_config.get('mask_absence_timeout', 3.0))
                     ])
             
             # Обновляем IP Rockchip в поле ввода
@@ -713,6 +721,12 @@ def build_interface():
                     fields['yaw'].change(
                         fn=lambda value, vt=violation_type: update_config_param_text(vt, 'yaw', max(0.0, min(1.0, float(value) if value else 0.2))),
                         inputs=[fields['yaw']],
+                        outputs=[status]
+                    )
+                if fields.get('mask_absence_timeout') is not None:
+                    fields['mask_absence_timeout'].change(
+                        fn=lambda value, vt=violation_type: update_config_param_text(vt, 'mask_absence_timeout', max(0.1, float(value) if value else 3.0)),
+                        inputs=[fields['mask_absence_timeout']],
                         outputs=[status]
                     )
                 # Кнопки калибровки положения головы
