@@ -21,11 +21,12 @@ services:
 
   ffmpeg:
     image: lscr.io/linuxserver/ffmpeg:latest
+    network_mode: "host"
     depends_on:
       - rtsp-server
     volumes:
       - ./video.mp4:/video.mp4:ro
-    entrypoint: ["ffmpeg", "-re", "-stream_loop", "-1", "-i", "/video.mp4", "-c", "copy", "-f", "rtsp", "-rtsp_transport", "tcp", "rtsp://rtsp-server:8554/processed"]
+    entrypoint: ["ffmpeg", "-re", "-stream_loop", "-1", "-i", "/video.mp4", "-c", "copy", "-f", "rtsp", "-rtsp_transport", "tcp", "rtsp://100.92.90.73:8554/stream"]
 
   mjpeg-server:
     build:
